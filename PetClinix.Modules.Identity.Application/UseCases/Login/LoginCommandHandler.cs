@@ -61,6 +61,6 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, Result<L
         await _userRepository.UpdateAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<LoginResponse>.Success(new LoginResponse(token, refreshToken, user.Email.Value, user.Role.ToString()));
+        return Result<LoginResponse>.Success(new LoginResponse(token, refreshToken, user.Email.Value, user.Role.ToString(), user.Name));
     }
 }
