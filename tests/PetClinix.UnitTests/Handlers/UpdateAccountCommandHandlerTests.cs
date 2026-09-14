@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using PetClinix.BuildingBlocks.Application;
+using PetClinix.Modules.Identity.Application.Contracts;
 using PetClinix.Modules.Identity.Application.UseCases.UpdateAccount;
 using PetClinix.Modules.Identity.Domain.Entities;
 using PetClinix.Modules.Identity.Domain.Repositories;
@@ -17,6 +18,7 @@ public class UpdateAccountCommandHandlerTests
     private readonly IUserRepository _userRepositoryMock;
     private readonly IClinicRepository _clinicRepositoryMock;
     private readonly IUnitOfWork _unitOfWorkMock;
+    private readonly IPasswordHasher _passwordHasherMock;
     private readonly UpdateAccountCommandHandler _handler;
 
     public UpdateAccountCommandHandlerTests()
@@ -24,7 +26,8 @@ public class UpdateAccountCommandHandlerTests
         _userRepositoryMock = Substitute.For<IUserRepository>();
         _clinicRepositoryMock = Substitute.For<IClinicRepository>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        _handler = new UpdateAccountCommandHandler(_userRepositoryMock, _clinicRepositoryMock, _unitOfWorkMock);
+        _passwordHasherMock = Substitute.For<IPasswordHasher>();
+        _handler = new UpdateAccountCommandHandler(_userRepositoryMock, _clinicRepositoryMock, _unitOfWorkMock, _passwordHasherMock);
     }
 
     private static User CreateValidUser(Guid clinicId)
@@ -49,6 +52,7 @@ public class UpdateAccountCommandHandlerTests
     private static UpdateAccountCommand CreateValidCommand(Guid userId, Guid clinicId) => new(
         userId, clinicId,
         "Novo Nome", "1188887777", new DateOnly(1991, 5, 10),
+        "NewPassword@123",
         "Nova Clinica", "Nova Razao", "98765432000111",
         "novo@email.com", "1177778888",
         "01001000", "Nova Rua", "999", "Novo Bairro",
@@ -96,6 +100,7 @@ public class UpdateAccountCommandHandlerTests
 
         _userRepositoryMock.GetByIdAsync(command.UserId, Arg.Any<CancellationToken>()).Returns(user);
         _clinicRepositoryMock.GetByIdAsync(command.ClinicId, Arg.Any<CancellationToken>()).Returns(clinic);
+        _passwordHasherMock.Hash(Arg.Any<string>()).Returns("hashed-password");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
