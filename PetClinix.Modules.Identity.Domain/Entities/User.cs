@@ -159,4 +159,12 @@ public sealed class User : AggregateRoot
         UpdatedByUserId = updatedByUserId;
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    public void ChangePassword(string newPasswordHash)
+    {
+        if (string.IsNullOrWhiteSpace(newPasswordHash))
+            throw new IdentityDomainException("identity.user.password_hash_required", "A nova senha é obrigatória.");
+
+        PasswordHash = newPasswordHash;
+    }
 }

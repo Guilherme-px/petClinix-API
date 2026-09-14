@@ -1,4 +1,5 @@
 using PetClinix.BuildingBlocks.Application;
+using PetClinix.Modules.Identity.Application.Contracts;
 using PetClinix.Modules.Identity.Domain.Exceptions;
 using PetClinix.Modules.Identity.Domain.Repositories;
 
@@ -9,15 +10,18 @@ public sealed class UpdateAccountCommandHandler : ICommandHandler<UpdateAccountC
     private readonly IUserRepository _userRepository;
     private readonly IClinicRepository _clinicRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPasswordHasher _passwordHasher;
 
     public UpdateAccountCommandHandler(
         IUserRepository userRepository,
         IClinicRepository clinicRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IPasswordHasher passwordHasher)
     {
         _userRepository = userRepository;
         _clinicRepository = clinicRepository;
         _unitOfWork = unitOfWork;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<Result> Handle(UpdateAccountCommand command, CancellationToken cancellationToken)
@@ -34,6 +38,13 @@ public sealed class UpdateAccountCommandHandler : ICommandHandler<UpdateAccountC
         try
         {
             user.UpdatePersonalInfo(command.UserName, command.UserPhoneNumber, command.UserBirthDate, command.UserId);
+
+            if (!string.IsNullOrWhiteSpace(command.NewPassword))
+            {
+                var passwordHash = _passwordHasher.Hash(command.NewPassword);
+                user.ChangePassword(passwordHash);
+            }
+
             clinic.UpdateInfo(
                 command.ClinicTradeName, command.ClinicLegalName, command.ClinicDocumentNumber,
                 command.ClinicEmail, command.ClinicPhoneNumber,

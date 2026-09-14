@@ -32,6 +32,7 @@ public class AccountController : ControllerBase
         var command = new UpdateAccountCommand(
             userId, clinicId,
             request.UserName, request.UserPhoneNumber, request.UserBirthDate,
+            request.NewPassword,
             request.ClinicTradeName, request.ClinicLegalName, request.ClinicDocumentNumber,
             request.ClinicEmail, request.ClinicPhoneNumber,
             request.ClinicZipCode, request.ClinicStreet, request.ClinicNumber, request.ClinicNeighborhood,
@@ -50,6 +51,7 @@ public class AccountController : ControllerBase
 
 public record UpdateAccountRequest(
     string UserName, string UserPhoneNumber, DateOnly UserBirthDate,
+    string? NewPassword,
     string ClinicTradeName, string ClinicLegalName, string ClinicDocumentNumber,
     string ClinicEmail, string ClinicPhoneNumber,
     string ClinicZipCode, string ClinicStreet, string ClinicNumber, string ClinicNeighborhood,
