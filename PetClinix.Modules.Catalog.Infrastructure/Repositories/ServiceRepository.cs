@@ -24,11 +24,19 @@ public class ServiceRepository : IServiceRepository
         return await _context.Services.AnyAsync(s => s.ClinicId == clinicId && s.Name == name, cancellationToken);
     }
 
-    public async Task<(IEnumerable<Service> Services, int TotalCount)> GetAllByClinicIdAsync(Guid clinicId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(IEnumerable<Service> Services, int TotalCount)> GetAllByClinicIdAsync(
+    Guid clinicId, int pageNumber, int pageSize, string search = "", CancellationToken cancellationToken = default)
     {
         var query = _context.Services
-            .Where(s => s.ClinicId == clinicId && s.IsActive)
-            .OrderBy(s => s.Name);
+            .Where(s => s.ClinicId == clinicId && s.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(s => s.Name.ToLower().Contains(term.ToLower()));
+        }
+
+        query = query.OrderBy(s => s.Name);
 
         var totalCount = await query.CountAsync(cancellationToken);
 

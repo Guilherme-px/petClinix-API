@@ -14,7 +14,8 @@ public sealed class GetServicesQueryHandler : ICommandHandler<GetServicesQuery, 
 
     public async Task<Result<PagedResult<ServiceResponse>>> Handle(GetServicesQuery query, CancellationToken cancellationToken)
     {
-        var (services, totalCount) = await _serviceRepository.GetAllByClinicIdAsync(query.ClinicId, query.PageNumber, query.PageSize, cancellationToken);
+        var (services, totalCount) = await _serviceRepository.GetAllByClinicIdAsync(
+            query.ClinicId, query.PageNumber, query.PageSize, query.Search, cancellationToken);
 
         var response = services.Select(s => new ServiceResponse(
             s.Id,
