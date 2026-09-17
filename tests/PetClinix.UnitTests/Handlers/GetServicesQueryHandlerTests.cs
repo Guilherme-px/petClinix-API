@@ -37,12 +37,12 @@ public class GetServicesQueryHandlerTests
         var query = new GetServicesQuery(clinicId, 1, 10);
 
         var services = new List<Service>
-        {
-            CreateValidService(clinicId),
-            CreateValidService(clinicId)
-        };
+    {
+        CreateValidService(clinicId),
+        CreateValidService(clinicId)
+    };
 
-        _serviceRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<CancellationToken>())
+        _serviceRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((services, 2));
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -61,7 +61,7 @@ public class GetServicesQueryHandlerTests
         var clinicId = Guid.NewGuid();
         var query = new GetServicesQuery(clinicId, 1, 10);
 
-        _serviceRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<CancellationToken>())
+        _serviceRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((new List<Service>(), 0));
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -69,5 +69,35 @@ public class GetServicesQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Search_Term_To_Repository()
+    {
+        var clinicId = Guid.NewGuid();
+        var query = new GetServicesQuery(clinicId, 1, 10, "Consulta");
+
+        _serviceRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, "Consulta", Arg.Any<CancellationToken>())
+            .Returns((new List<Service>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _serviceRepositoryMock.Received(1).GetAllByClinicIdAsync(
+            clinicId, 1, 10, "Consulta", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Empty_Search_When_Not_Provided()
+    {
+        var clinicId = Guid.NewGuid();
+        var query = new GetServicesQuery(clinicId, 1, 10);
+
+        _serviceRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, "", Arg.Any<CancellationToken>())
+            .Returns((new List<Service>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _serviceRepositoryMock.Received(1).GetAllByClinicIdAsync(
+            clinicId, 1, 10, "", Arg.Any<CancellationToken>());
     }
 }
