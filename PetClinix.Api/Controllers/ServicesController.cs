@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PetClinix.Api.Extensions;
 using PetClinix.BuildingBlocks.Application;
 using PetClinix.Modules.Catalog.Application.UseCases.RegisterService;
 using PetClinix.Modules.Catalog.Application.UseCases.GetServices;
 using PetClinix.Modules.Catalog.Application.UseCases.UpdateService;
 using PetClinix.Modules.Catalog.Application.UseCases.DeactivateService;
-using System.Security.Claims;
 
 namespace PetClinix.Api.Controllers;
 
@@ -34,10 +34,7 @@ public class ServicesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> RegisterService([FromBody] RegisterServiceRequest request, CancellationToken cancellationToken)
     {
-        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-
-        if (!Guid.TryParse(clinicIdClaim, out var clinicId) || !Guid.TryParse(userIdClaim, out var userId))
+        if (!User.TryGetClinicId(out var clinicId) || !User.TryGetUserId(out var userId))
         {
             return Unauthorized(new { message = "Token inválido." });
         }
@@ -54,24 +51,22 @@ public class ServicesController : ControllerBase
 
         var result = await _registerServiceHandler.Handle(command, cancellationToken);
 
-        if (result.IsFailure)
-        {
-            return BadRequest(new { result.ErrorCode, result.ErrorMessage });
-        }
-
-        return NoContent();
+        return result.ToActionResult();
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetServices([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetServices(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
     {
-        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
-        if (!Guid.TryParse(clinicIdClaim, out var clinicId))
+        if (!User.TryGetClinicId(out var clinicId))
         {
             return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
         }
 
-        var query = new GetServicesQuery(clinicId, pageNumber, pageSize);
+        var query = new GetServicesQuery(clinicId, pageNumber, pageSize, search ?? "");
         var result = await _getServicesHandler.Handle(query, cancellationToken);
 
         return Ok(result.Value);
@@ -80,10 +75,7 @@ public class ServicesController : ControllerBase
     [HttpPut("{serviceId}")]
     public async Task<IActionResult> UpdateService(Guid serviceId, [FromBody] UpdateServiceRequest request, CancellationToken cancellationToken)
     {
-        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-
-        if (!Guid.TryParse(clinicIdClaim, out var clinicId) || !Guid.TryParse(userIdClaim, out var userId))
+        if (!User.TryGetClinicId(out var clinicId) || !User.TryGetUserId(out var userId))
         {
             return Unauthorized(new { message = "Token inválido." });
         }
@@ -94,20 +86,13 @@ public class ServicesController : ControllerBase
 
         var result = await _updateServiceHandler.Handle(command, cancellationToken);
 
-        if (result.IsFailure)
-        {
-            return BadRequest(new { result.ErrorCode, result.ErrorMessage });
-        }
-
-        return NoContent();
+        return result.ToActionResult();
     }
 
     [HttpDelete("{serviceId}")]
     public async Task<IActionResult> DeactivateService(Guid serviceId, CancellationToken cancellationToken)
     {
-        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
-        
-        if (!Guid.TryParse(clinicIdClaim, out var clinicId))
+        if (!User.TryGetClinicId(out var clinicId))
         {
             return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
         }
@@ -115,12 +100,7 @@ public class ServicesController : ControllerBase
         var command = new DeactivateServiceCommand(clinicId, serviceId);
         var result = await _deactivateServiceHandler.Handle(command, cancellationToken);
 
-        if (result.IsFailure)
-        {
-            return BadRequest(new { result.ErrorCode, result.ErrorMessage });
-        }
-
-        return NoContent();
+        return result.ToActionResult();
     }
 }
 
