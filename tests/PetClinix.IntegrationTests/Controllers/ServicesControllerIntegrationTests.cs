@@ -77,85 +77,85 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
         return (email, password, userId, clinicId);
     }
 
+    private record AuthenticatedContext(Guid UserId, Guid ClinicId);
+
+    private async Task<AuthenticatedContext> AuthenticateAsync()
+    {
+        var (email, password, userId, clinicId) = await SetupAdminAsync();
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        return new AuthenticatedContext(userId, clinicId);
+    }
+
+    private Task<HttpResponseMessage> RegisterServiceAsync(
+        string name, string description, int durationInMinutes, decimal price, bool requiresVeterinarian) =>
+        _client.PostAsJsonAsync("/api/services", new
+        {
+            Name = name,
+            Description = description,
+            DurationInMinutes = durationInMinutes,
+            Price = price,
+            RequiresVeterinarian = requiresVeterinarian
+        });
+
+    private async Task<Guid> GetFirstServiceIdAsync(Guid clinicId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var savedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.ClinicId == clinicId);
+        return savedService!.Id;
+    }
+
     [Fact]
     public async Task RegisterService_Should_Return_401_When_No_Token_Provided()
     {
-        var serviceRequest = new
+        var response = await _client.PostAsJsonAsync("/api/services", new
         {
             Name = "Vacina V3",
             Description = "Vacina antirrábica",
             DurationInMinutes = 15,
             Price = 80.0m,
             RequiresVeterinarian = true
-        };
+        });
 
-        var response = await _client.PostAsJsonAsync("/api/services", serviceRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task RegisterService_Should_Return_204_And_Save_Service_When_Valid()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var auth = await AuthenticateAsync();
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var serviceRequest = new
-        {
-            Name = "Consulta Clínica Geral",
-            Description = "Consulta padrão com veterinário.",
-            DurationInMinutes = 30,
-            Price = 150.0m,
-            RequiresVeterinarian = true
-        };
-
-        var response = await _client.PostAsJsonAsync("/api/services", serviceRequest);
+        var response = await RegisterServiceAsync("Consulta Clínica Geral", "Consulta padrão com veterinário.", 30, 150.0m, true);
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         using var scope = _factory.Services.CreateScope();
         var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-        var savedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.ClinicId == clinicId);
+        var savedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.ClinicId == auth.ClinicId);
 
         savedService.Should().NotBeNull();
         savedService!.Name.Should().Be("Consulta Clínica Geral");
         savedService.DurationInMinutes.Should().Be(30);
         savedService.Price.Should().Be(150.0m);
         savedService.RequiresVeterinarian.Should().BeTrue();
-        savedService.CreatedByUserId.Should().Be(userId);
-
-        _client.DefaultRequestHeaders.Authorization = null;
+        savedService.CreatedByUserId.Should().Be(auth.UserId);
     }
 
     [Fact]
     public async Task RegisterService_Should_Return_400_When_Name_Duplicated()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await AuthenticateAsync();
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var serviceRequest = new
-        {
-            Name = "Vacina Duplicate",
-            Description = "Teste de duplicidade",
-            DurationInMinutes = 10,
-            Price = 50.0m,
-            RequiresVeterinarian = true
-        };
-
-        var firstResponse = await _client.PostAsJsonAsync("/api/services", serviceRequest);
+        var firstResponse = await RegisterServiceAsync("Vacina Duplicate", "Teste de duplicidade", 10, 50.0m, true);
         firstResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var secondResponse = await _client.PostAsJsonAsync("/api/services", serviceRequest);
+        var secondResponse = await RegisterServiceAsync("Vacina Duplicate", "Teste de duplicidade", 10, 50.0m, true);
         secondResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var errorContent = await secondResponse.Content.ReadFromJsonAsync<ErrorResponse>();
         errorContent!.ErrorCode.Should().Be("catalog.service.name_already_exists");
-
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
@@ -168,21 +168,9 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
     [Fact]
     public async Task GetServices_Should_Return_200_And_Service_List_When_Valid()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await AuthenticateAsync();
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var serviceRequest = new
-        {
-            Name = "Vacina V3 Listar",
-            Description = "Vacina para teste de lista",
-            DurationInMinutes = 15,
-            Price = 80.0m,
-            RequiresVeterinarian = true
-        };
-        await _client.PostAsJsonAsync("/api/services", serviceRequest);
+        await RegisterServiceAsync("Vacina V3 Listar", "Vacina para teste de lista", 15, 80.0m, true);
 
         var response = await _client.GetAsync("/api/services");
 
@@ -193,8 +181,71 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
         result!.Items.Should().NotBeEmpty();
         result.TotalCount.Should().BeGreaterThanOrEqualTo(1);
         result.Items.Should().ContainSingle(s => s.Name == "Vacina V3 Listar");
+    }
 
-        _client.DefaultRequestHeaders.Authorization = null;
+    [Fact]
+    public async Task GetServices_Should_Return_Only_Matching_When_Search_Provided()
+    {
+        await AuthenticateAsync();
+
+        await RegisterServiceAsync("Banho e Tosa", "Higiene completa", 60, 90.0m, false);
+        await RegisterServiceAsync("Consulta Veterinária", "Consulta geral", 30, 150.0m, true);
+        await RegisterServiceAsync("Vacina V10", "Vacinação", 15, 80.0m, true);
+
+        var response = await _client.GetAsync("/api/services?search=banho");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
+        result!.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(s => s.Name == "Banho e Tosa");
+    }
+
+    [Fact]
+    public async Task GetServices_Should_Return_TotalCount_Filtered_When_Search_Provided()
+    {
+        await AuthenticateAsync();
+
+        await RegisterServiceAsync("Vacina V3", "Antirrábica", 15, 80.0m, true);
+        await RegisterServiceAsync("Vacina V10", "Polivalente", 15, 90.0m, true);
+        await RegisterServiceAsync("Banho", "Higiene", 45, 70.0m, false);
+
+        var response = await _client.GetAsync("/api/services?search=vacina");
+
+        var result = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
+        result!.TotalCount.Should().Be(2);
+        result.Items.Should().HaveCount(2);
+        result.Items.Should().OnlyContain(s => s.Name.Contains("Vacina"));
+    }
+
+    [Fact]
+    public async Task GetServices_Should_Return_Empty_List_When_Search_Has_No_Match()
+    {
+        await AuthenticateAsync();
+
+        await RegisterServiceAsync("Consulta", "Geral", 30, 150.0m, true);
+
+        var response = await _client.GetAsync("/api/services?search=cirurgia");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
+        result!.TotalCount.Should().Be(0);
+        result.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetServices_Should_Return_All_When_Search_Is_Empty()
+    {
+        await AuthenticateAsync();
+
+        await RegisterServiceAsync("Banho", "Higiene", 45, 70.0m, false);
+        await RegisterServiceAsync("Tosa", "Corte", 45, 70.0m, false);
+
+        var response = await _client.GetAsync("/api/services?search=");
+
+        var result = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
+        result!.TotalCount.Should().Be(2);
     }
 
     [Fact]
@@ -216,11 +267,7 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
     [Fact]
     public async Task UpdateService_Should_Return_400_When_Service_Does_Not_Exist()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var updateRequest = new
         {
@@ -236,36 +283,15 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
 
         var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         errorContent!.ErrorCode.Should().Be("catalog.service.not_found");
-
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
     public async Task UpdateService_Should_Return_204_And_Update_Db_When_Valid()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var auth = await AuthenticateAsync();
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var serviceRequest = new
-        {
-            Name = "Vacina Original",
-            Description = "Desc Original",
-            DurationInMinutes = 15,
-            Price = 80.0m,
-            RequiresVeterinarian = true
-        };
-        await _client.PostAsJsonAsync("/api/services", serviceRequest);
-
-        Guid serviceId;
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var savedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.ClinicId == clinicId);
-            serviceId = savedService!.Id;
-        }
+        await RegisterServiceAsync("Vacina Original", "Desc Original", 15, 80.0m, true);
+        var serviceId = await GetFirstServiceIdAsync(auth.ClinicId);
 
         var updateRequest = new
         {
@@ -279,20 +305,16 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
         var response = await _client.PutAsJsonAsync($"/api/services/{serviceId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var updatedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.Id == serviceId);
+        using var scope = _factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var updatedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.Id == serviceId);
 
-            updatedService.Should().NotBeNull();
-            updatedService!.Name.Should().Be("Vacina Atualizada");
-            updatedService.DurationInMinutes.Should().Be(30);
-            updatedService.Price.Should().Be(120.0m);
-            updatedService.RequiresVeterinarian.Should().BeFalse();
-            updatedService.UpdatedByUserId.Should().Be(userId);
-        }
-
-        _client.DefaultRequestHeaders.Authorization = null;
+        updatedService.Should().NotBeNull();
+        updatedService!.Name.Should().Be("Vacina Atualizada");
+        updatedService.DurationInMinutes.Should().Be(30);
+        updatedService.Price.Should().Be(120.0m);
+        updatedService.RequiresVeterinarian.Should().BeFalse();
+        updatedService.UpdatedByUserId.Should().Be(auth.UserId);
     }
 
     [Fact]
@@ -305,61 +327,32 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
     [Fact]
     public async Task DeactivateService_Should_Return_400_When_Service_Does_Not_Exist()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var response = await _client.DeleteAsync($"/api/services/{Guid.NewGuid()}");
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         errorContent!.ErrorCode.Should().Be("catalog.service.not_found");
-
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
     public async Task DeactivateService_Should_Return_204_And_Set_Inactive_In_Db_When_Valid()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var auth = await AuthenticateAsync();
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var serviceRequest = new
-        {
-            Name = "Servico Delete",
-            Description = "Desc Delete",
-            DurationInMinutes = 15,
-            Price = 50.0m,
-            RequiresVeterinarian = true
-        };
-        await _client.PostAsJsonAsync("/api/services", serviceRequest);
-
-        Guid serviceId;
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var savedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.ClinicId == clinicId);
-            serviceId = savedService!.Id;
-        }
+        await RegisterServiceAsync("Servico Delete", "Desc Delete", 15, 50.0m, true);
+        var serviceId = await GetFirstServiceIdAsync(auth.ClinicId);
 
         var response = await _client.DeleteAsync($"/api/services/{serviceId}");
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var deactivatedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.Id == serviceId);
+        using var scope = _factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var deactivatedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.Id == serviceId);
 
-            deactivatedService.Should().NotBeNull();
-            deactivatedService!.IsActive.Should().BeFalse();
-        }
-
-        _client.DefaultRequestHeaders.Authorization = null;
+        deactivatedService.Should().NotBeNull();
+        deactivatedService!.IsActive.Should().BeFalse();
     }
 }
 
