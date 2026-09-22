@@ -8,13 +8,18 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
 {
     private readonly IUserRepository _userRepository;
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public RefreshTokenCommandHandler(IUserRepository userRepository, IJwtTokenGenerator jwtTokenGenerator)
+    public RefreshTokenCommandHandler(
+        IUserRepository userRepository,
+        IJwtTokenGenerator jwtTokenGenerator,
+        IUnitOfWork unitOfWork)
     {
         _userRepository = userRepository;
         _jwtTokenGenerator = jwtTokenGenerator;
+        _unitOfWork = unitOfWork;
     }
-    
+
     public async Task<Result<RefreshTokenResponse>> Handle(RefreshTokenCommand command, CancellationToken cancellationToken)
     {
         var user = await _userRepository.GetByRefreshTokenAsync(command.RefreshToken, cancellationToken);
@@ -28,6 +33,7 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
         var newRefreshToken = user.GenerateRefreshToken();
 
         await _userRepository.UpdateAsync(user, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<RefreshTokenResponse>.Success(new RefreshTokenResponse(newToken, newRefreshToken));
     }
