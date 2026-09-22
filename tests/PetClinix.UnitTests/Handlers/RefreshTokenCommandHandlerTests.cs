@@ -14,13 +14,15 @@ public class RefreshTokenCommandHandlerTests
 {
     private readonly IUserRepository _userRepositoryMock;
     private readonly IJwtTokenGenerator _jwtTokenGeneratorMock;
+    private readonly IUnitOfWork _unitOfWorkMock;
     private readonly RefreshTokenCommandHandler _handler;
 
     public RefreshTokenCommandHandlerTests()
     {
         _userRepositoryMock = Substitute.For<IUserRepository>();
         _jwtTokenGeneratorMock = Substitute.For<IJwtTokenGenerator>();
-        _handler = new RefreshTokenCommandHandler(_userRepositoryMock, _jwtTokenGeneratorMock);
+        _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _handler = new RefreshTokenCommandHandler(_userRepositoryMock, _jwtTokenGeneratorMock, _unitOfWorkMock);
     }
 
     private static User CreateValidUser()
@@ -79,5 +81,31 @@ public class RefreshTokenCommandHandlerTests
         result.Value.RefreshToken.Should().NotBe(oldToken);
 
         await _userRepositoryMock.Received(1).UpdateAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_SaveChanges_When_Refresh_Succeeds()
+    {
+        var user = CreateValidUser();
+        var oldToken = user.GenerateRefreshToken();
+
+        var command = new RefreshTokenCommand(oldToken);
+        _userRepositoryMock.GetByRefreshTokenAsync(oldToken, Arg.Any<CancellationToken>()).Returns(user);
+        _jwtTokenGeneratorMock.GenerateToken(user).Returns("new.jwt.token");
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _unitOfWorkMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_Not_SaveChanges_When_Token_Invalid()
+    {
+        var command = new RefreshTokenCommand("invalid-token");
+        _userRepositoryMock.GetByRefreshTokenAsync(command.RefreshToken, Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _unitOfWorkMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
