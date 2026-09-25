@@ -44,7 +44,7 @@ public class GetStaffQueryHandlerTests
             CreateValidUser(clinicId, Guid.NewGuid())
         };
 
-        _userRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<CancellationToken>())
+        _userRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((users, 2));
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -55,5 +55,37 @@ public class GetStaffQueryHandlerTests
         result.Value.TotalCount.Should().Be(2);
         result.Value.PageNumber.Should().Be(1);
         result.Value.PageSize.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Search_Term_To_Repository()
+    {
+        var clinicId = Guid.NewGuid();
+        var query = new GetStaffQuery(clinicId, 1, 10, "João");
+
+        _userRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, "João", Arg.Any<CancellationToken>())
+            .Returns((new List<User>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _userRepositoryMock.Received(1).GetAllByClinicIdAsync(
+            clinicId, 1, 10, "João", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Empty_Search_When_Not_Provided()
+    {
+        var clinicId = Guid.NewGuid();
+        var query = new GetStaffQuery(clinicId, 1, 10);
+
+        _userRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, "", Arg.Any<CancellationToken>())
+            .Returns((new List<User>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _userRepositoryMock.Received(1).GetAllByClinicIdAsync(
+            clinicId, 1, 10, "", Arg.Any<CancellationToken>());
     }
 }

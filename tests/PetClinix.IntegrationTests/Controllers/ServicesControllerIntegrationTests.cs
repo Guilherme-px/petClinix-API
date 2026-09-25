@@ -354,6 +354,22 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
         deactivatedService.Should().NotBeNull();
         deactivatedService!.IsActive.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task GetServices_Should_Find_Accented_Name_When_Searching_Without_Accents()
+    {
+        await AuthenticateAsync();
+
+        await RegisterServiceAsync("Injeção", "Aplicação de vacina", 15, 80.0m, true);
+
+        var response = await _client.GetAsync("/api/services?search=injecao");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
+        result!.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(s => s.Name == "Injeção");
+    }
 }
 
 public class PagedServiceResponse

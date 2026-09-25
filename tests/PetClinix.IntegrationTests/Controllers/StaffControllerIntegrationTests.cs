@@ -55,7 +55,8 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         using (var scope = _factory.Services.CreateScope())
         {
             var billingDb = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
-            var subscription = Subscription.Create(clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PlanTier.Basic);
+            var subscription = Subscription.Create(
+                clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PlanTier.Basic);
             await billingDb.Subscriptions.AddAsync(subscription);
             await billingDb.SaveChangesAsync();
         }
@@ -69,10 +70,54 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         return (email, password);
     }
 
+    private record AuthenticatedContext(Guid UserId, Guid ClinicId);
+
+    private async Task<AuthenticatedContext> AuthenticateAsync()
+    {
+        var (email, password, userId, clinicId) = await SetupAdminWithStaffAsync();
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        return new AuthenticatedContext(userId, clinicId);
+    }
+
+    private async Task<(string Email, string Password, Guid UserId, Guid ClinicId)> SetupAdminWithStaffAsync()
+    {
+        var (email, password) = await SetupAdminWithSubscriptionAsync();
+
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(email);
+        var user = await identityDb.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
+
+        return (email, password, user!.Id, user.ClinicId);
+    }
+
+    private Task<HttpResponseMessage> RegisterStaffAsync(string name, string email) =>
+        _client.PostAsJsonAsync("/api/clinics/me/staff", new
+        {
+            Name = name,
+            Email = email,
+            DocumentNumber = Guid.NewGuid().ToString("N").Substring(0, 11),
+            PhoneNumber = "11999990000",
+            BirthDate = new DateOnly(1990, 1, 1),
+            Role = "Veterinarian"
+        });
+
+    private async Task<Guid> GetStaffUserIdByEmailAsync(string staffEmail)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(staffEmail);
+        var savedUser = await identityDb.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
+        return savedUser!.Id;
+    }
+
     [Fact]
     public async Task RegisterStaff_Should_Return_401_When_No_Token_Provided()
     {
-        var staffRequest = new
+        var response = await _client.PostAsJsonAsync("/api/clinics/me/staff", new
         {
             Name = "Dr. Teste",
             Email = "dr@teste.com",
@@ -80,35 +125,18 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
             PhoneNumber = "11999990000",
             BirthDate = new DateOnly(1990, 1, 1),
             Role = "Veterinarian"
-        };
-
-        var response = await _client.PostAsJsonAsync("/api/clinics/me/staff", staffRequest);
+        });
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task RegisterStaff_Should_Return_204_And_Create_User_When_Valid()
+    public async Task RegisterStaff_Should_Return_200_And_Create_User_When_Valid()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var staffEmail = $"vet_{Guid.NewGuid()}@teste.com";
-        var staffRequest = new
-        {
-            Name = "Dr. Dolittle",
-            Email = staffEmail,
-            DocumentNumber = "98765432100",
-            PhoneNumber = "11988887777",
-            BirthDate = new DateOnly(1985, 5, 10),
-            Role = "Veterinarian"
-        };
-
-        var response = await _client.PostAsJsonAsync("/api/clinics/me/staff", staffRequest);
+        var response = await RegisterStaffAsync("Dr. Dolittle", staffEmail);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -120,51 +148,23 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         savedUser.Should().NotBeNull();
         savedUser!.Role.Should().Be(UserRole.Veterinarian);
         savedUser.PasswordHash.Should().BeNull();
-
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
     public async Task RegisterStaff_Should_Return_400_When_Plan_Limit_Reached()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         for (int i = 0; i < 3; i++)
         {
-            var staffRequest = new
-            {
-                Name = $"Staff {i}",
-                Email = $"staff_{i}_{Guid.NewGuid()}@teste.com",
-                DocumentNumber = Guid.NewGuid().ToString("N").Substring(0, 11),
-                PhoneNumber = "11999990000",
-                BirthDate = new DateOnly(1990, 1, 1),
-                Role = "Receptionist"
-            };
-            await _client.PostAsJsonAsync("/api/clinics/me/staff", staffRequest);
+            await RegisterStaffAsync($"Staff {i}", $"staff_{i}_{Guid.NewGuid()}@teste.com");
         }
 
-        var limitRequest = new
-        {
-            Name = "Staff 5",
-            Email = $"staff5_{Guid.NewGuid()}@teste.com",
-            DocumentNumber = "11122233344",
-            PhoneNumber = "11999990000",
-            BirthDate = new DateOnly(1990, 1, 1),
-            Role = "Receptionist"
-        };
-
-        var limitResponse = await _client.PostAsJsonAsync("/api/clinics/me/staff", limitRequest);
+        var limitResponse = await RegisterStaffAsync("Staff 5", $"staff5_{Guid.NewGuid()}@teste.com");
 
         limitResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var errorContent = await limitResponse.Content.ReadFromJsonAsync<ErrorResponse>();
         errorContent!.ErrorCode.Should().Be("identity.staff_limit_reached");
-
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
@@ -177,12 +177,9 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
     [Fact]
     public async Task GetStaff_Should_Return_200_And_Staff_List_When_Valid()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
+        await AuthenticateAsync();
 
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await RegisterStaffAsync("Dr. Alguém", $"vet_{Guid.NewGuid()}@teste.com");
 
         var response = await _client.GetAsync("/api/clinics/me/staff");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -191,24 +188,50 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         result.Should().NotBeNull();
         result!.Items.Should().NotBeEmpty();
         result.TotalCount.Should().BeGreaterThanOrEqualTo(1);
+    }
 
-        _client.DefaultRequestHeaders.Authorization = null;
+    [Fact]
+    public async Task GetStaff_Should_Return_Only_Matching_When_Search_Provided()
+    {
+        await AuthenticateAsync();
+
+        await RegisterStaffAsync("Joao Veterinario", $"joao_{Guid.NewGuid()}@teste.com");
+        await RegisterStaffAsync("Maria Auxiliar", $"maria_{Guid.NewGuid()}@teste.com");
+
+        var response = await _client.GetAsync("/api/clinics/me/staff?search=joao");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedStaffResponse>();
+        result!.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(s => s.Name == "Joao Veterinario");
+    }
+
+    [Fact]
+    public async Task GetStaff_Should_Return_All_When_Search_Is_Empty()
+    {
+        await AuthenticateAsync();
+
+        await RegisterStaffAsync("João Veterinário", $"joao_{Guid.NewGuid()}@teste.com");
+        await RegisterStaffAsync("Maria Auxiliar", $"maria_{Guid.NewGuid()}@teste.com");
+
+        var response = await _client.GetAsync("/api/clinics/me/staff?search=");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedStaffResponse>();
+        result!.TotalCount.Should().Be(2);
     }
 
     [Fact]
     public async Task GetStaffById_Should_Return_404_When_User_Does_Not_Exist()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var fakeUserId = Guid.NewGuid();
         var response = await _client.GetAsync($"/api/clinics/me/staff/{fakeUserId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
@@ -229,12 +252,7 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
     [Fact]
     public async Task UpdateStaff_Should_Return_NotFound_When_User_Does_Not_Exist()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var updateRequest = new
         {
@@ -248,39 +266,16 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         var response = await _client.PutAsJsonAsync($"/api/clinics/me/staff/{fakeUserId}", updateRequest);
 
         response.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
     public async Task UpdateStaff_Should_Return_204_And_Update_Db_When_Valid()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var staffEmail = $"vet_{Guid.NewGuid()}@teste.com";
-        var staffRequest = new
-        {
-            Name = "Dr. Original",
-            Email = staffEmail,
-            DocumentNumber = "98765432100",
-            PhoneNumber = "11988887777",
-            BirthDate = new DateOnly(1985, 5, 10),
-            Role = "Veterinarian"
-        };
-        await _client.PostAsJsonAsync("/api/clinics/me/staff", staffRequest);
-
-        Guid staffUserId;
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-            var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(staffEmail);
-            var savedUser = await db.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
-            staffUserId = savedUser!.Id;
-        }
+        await RegisterStaffAsync("Dr. Original", staffEmail);
+        var staffUserId = await GetStaffUserIdByEmailAsync(staffEmail);
 
         var updateRequest = new
         {
@@ -293,17 +288,13 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         var response = await _client.PutAsJsonAsync($"/api/clinics/me/staff/{staffUserId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-            var updatedUser = await db.Users.FirstOrDefaultAsync(u => u.Id == staffUserId);
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var updatedUser = await identityDb.Users.FirstOrDefaultAsync(u => u.Id == staffUserId);
 
-            updatedUser.Should().NotBeNull();
-            updatedUser!.Name.Should().Be("Dr. Atualizado");
-            updatedUser.Role.Should().Be(UserRole.Receptionist);
-        }
-
-        _client.DefaultRequestHeaders.Authorization = null;
+        updatedUser.Should().NotBeNull();
+        updatedUser!.Name.Should().Be("Dr. Atualizado");
+        updatedUser.Role.Should().Be(UserRole.Receptionist);
     }
 
     [Fact]
@@ -317,64 +308,49 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
     [Fact]
     public async Task DeactivateStaff_Should_Return_NotFound_When_User_Does_Not_Exist()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var fakeUserId = Guid.NewGuid();
         var response = await _client.DeleteAsync($"/api/clinics/me/staff/{fakeUserId}");
 
         response.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
-        _client.DefaultRequestHeaders.Authorization = null;
     }
 
     [Fact]
     public async Task DeactivateStaff_Should_Return_204_And_Set_Inactive_In_Db_When_Valid()
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
-
-        var loginRequest = new { Email = email, Password = password };
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", loginRequest);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await AuthenticateAsync();
 
         var staffEmail = $"vet_{Guid.NewGuid()}@teste.com";
-        var staffRequest = new
-        {
-            Name = "Dr. Teste Delete",
-            Email = staffEmail,
-            DocumentNumber = "98765432100",
-            PhoneNumber = "11988887777",
-            BirthDate = new DateOnly(1985, 5, 10),
-            Role = "Veterinarian"
-        };
-        await _client.PostAsJsonAsync("/api/clinics/me/staff", staffRequest);
-
-        Guid staffUserId;
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-            var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(staffEmail);
-            var savedUser = await db.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
-            staffUserId = savedUser!.Id;
-        }
+        await RegisterStaffAsync("Dr. Teste Delete", staffEmail);
+        var staffUserId = await GetStaffUserIdByEmailAsync(staffEmail);
 
         var response = await _client.DeleteAsync($"/api/clinics/me/staff/{staffUserId}");
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-            var deactivatedUser = await db.Users.FirstOrDefaultAsync(u => u.Id == staffUserId);
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var deactivatedUser = await identityDb.Users.FirstOrDefaultAsync(u => u.Id == staffUserId);
 
-            deactivatedUser.Should().NotBeNull();
-            deactivatedUser!.IsActive.Should().BeFalse();
-        }
+        deactivatedUser.Should().NotBeNull();
+        deactivatedUser!.IsActive.Should().BeFalse();
+    }
 
-        _client.DefaultRequestHeaders.Authorization = null;
+    [Fact]
+    public async Task GetStaff_Should_Find_Accented_Name_When_Searching_Without_Accents()
+    {
+        await AuthenticateAsync();
+
+        await RegisterStaffAsync("João Veterinário", $"joao_{Guid.NewGuid()}@teste.com");
+        await RegisterStaffAsync("Maria Auxiliar", $"maria_{Guid.NewGuid()}@teste.com");
+
+        var response = await _client.GetAsync("/api/clinics/me/staff?search=joao");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedStaffResponse>();
+        result!.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(s => s.Name == "João Veterinário");
     }
 }
 
