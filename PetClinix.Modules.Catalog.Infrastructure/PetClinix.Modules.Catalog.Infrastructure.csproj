@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\PetClinix.BuildingBlocks.Infrastructure\PetClinix.BuildingBlocks.Infrastructure.csproj" />
     <ProjectReference Include="..\PetClinix.Modules.Catalog.Domain\PetClinix.Modules.Catalog.Domain.csproj" />
     <ProjectReference Include="..\PetClinix.Modules.Catalog.Application\PetClinix.Modules.Catalog.Application.csproj" />
   </ItemGroup>

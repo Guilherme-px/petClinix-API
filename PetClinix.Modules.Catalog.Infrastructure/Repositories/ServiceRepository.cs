@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PetClinix.BuildingBlocks.Infrastructure;
 using PetClinix.Modules.Catalog.Domain.Entities;
 using PetClinix.Modules.Catalog.Domain.Repositories;
 using PetClinix.Modules.Catalog.Infrastructure.Persistence;
@@ -25,15 +26,16 @@ public class ServiceRepository : IServiceRepository
     }
 
     public async Task<(IEnumerable<Service> Services, int TotalCount)> GetAllByClinicIdAsync(
-    Guid clinicId, int pageNumber, int pageSize, string search = "", CancellationToken cancellationToken = default)
+        Guid clinicId, int pageNumber, int pageSize, string search = "", CancellationToken cancellationToken = default)
     {
         var query = _context.Services
             .Where(s => s.ClinicId == clinicId && s.IsActive);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim();
-            query = query.Where(s => EF.Functions.ILike(s.Name, $"%{term}%"));
+            var term = TextSearch.Normalize(search);
+            query = query.Where(s => EF.Functions.ILike(
+                EF.Property<string>(s, "NameSearchable"), $"%{term}%"));
         }
 
         query = query.OrderBy(s => s.Name);

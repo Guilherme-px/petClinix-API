@@ -24,6 +24,11 @@ public class CatalogDbContext : DbContext
             entity.Property(s => s.ClinicId).IsRequired();
             entity.Property(s => s.CreatedByUserId).IsRequired();
             entity.HasIndex(s => new { s.ClinicId, s.Name }).IsUnique();
+
+            entity.Property<string>("NameSearchable")
+                .HasComputedColumnSql("lower(f_unaccent(\"Name\"))", stored: true);
+
+            entity.HasIndex("NameSearchable");
         });
     }
 }
