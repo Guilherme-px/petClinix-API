@@ -64,6 +64,7 @@ using PetClinix.Modules.Appointments.Infrastructure.Repositories;
 using System.Text;
 using System.Threading.RateLimiting;
 using Resend;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -247,20 +248,26 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     try
     {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var extensionCommand = new NpgsqlCommand(
+            "CREATE EXTENSION IF NOT EXISTS unaccent;", connection);
+        await extensionCommand.ExecuteNonQueryAsync();
+
         var identityDb = services.GetRequiredService<IdentityDbContext>();
-        identityDb.Database.Migrate();
+        await identityDb.Database.MigrateAsync();
 
         var billingDb = services.GetRequiredService<BillingDbContext>();
-        billingDb.Database.Migrate();
+        await billingDb.Database.MigrateAsync();
 
         var petsDb = services.GetRequiredService<PetsDbContext>();
-        petsDb.Database.Migrate();
+        await petsDb.Database.MigrateAsync();
 
         var catalogDb = services.GetRequiredService<CatalogDbContext>();
-        catalogDb.Database.Migrate();
+        await catalogDb.Database.MigrateAsync();
 
         var apptDb = services.GetRequiredService<AppointmentsDbContext>();
-        apptDb.Database.Migrate();
+        await apptDb.Database.MigrateAsync();
     }
     catch (Exception ex)
     {
