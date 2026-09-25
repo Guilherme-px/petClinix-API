@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PetClinix.BuildingBlocks.Infrastructure\PetClinix.BuildingBlocks.Infrastructure.csproj" />
     <ProjectReference Include="..\PetClinix.Modules.Identity.Application\PetClinix.Modules.Identity.Application.csproj" />
     <ProjectReference Include="..\PetClinix.Modules.Identity.Domain\PetClinix.Modules.Identity.Domain.csproj" />
   </ItemGroup>

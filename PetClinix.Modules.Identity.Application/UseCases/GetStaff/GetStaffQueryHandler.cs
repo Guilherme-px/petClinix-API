@@ -14,7 +14,7 @@ public sealed class GetStaffQueryHandler : ICommandHandler<GetStaffQuery, Result
 
     public async Task<Result<PagedResult<StaffResponse>>> Handle(GetStaffQuery query, CancellationToken cancellationToken)
     {
-        var (users, totalCount) = await _userRepository.GetAllByClinicIdAsync(query.ClinicId, query.PageNumber, query.PageSize, cancellationToken);
+        var (users, totalCount) = await _userRepository.GetAllByClinicIdAsync(query.ClinicId, query.PageNumber, query.PageSize, query.Search, cancellationToken);
 
         var response = users.Select(u => new StaffResponse(
             u.Id,

@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using PetClinix.BuildingBlocks.Infrastructure;
 using PetClinix.Modules.Identity.Domain.Entities;
+using PetClinix.Modules.Identity.Domain.Enums;
 using PetClinix.Modules.Identity.Domain.Repositories;
 using PetClinix.Modules.Identity.Domain.ValueObjects;
 using PetClinix.Modules.Identity.Infrastructure.Persistence;
@@ -55,18 +57,27 @@ public class UserRepository : IUserRepository
         return await _context.Users.CountAsync(u => u.ClinicId == clinicId, cancellationToken);
     }
 
-    public async Task<(IEnumerable<User> Users, int TotalCount)> GetAllByClinicIdAsync(Guid clinicId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(IEnumerable<User> Users, int TotalCount)> GetAllByClinicIdAsync(
+        Guid clinicId, int pageNumber, int pageSize, string search = "", CancellationToken cancellationToken = default)
     {
         var query = _context.Users
-        .Where(u => u.ClinicId == clinicId)
-        .OrderBy(u => u.Name);
+            .Where(u => u.ClinicId == clinicId && u.Role != UserRole.Admin);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = TextSearch.Normalize(search);
+            query = query.Where(u => EF.Functions.ILike(
+                EF.Property<string>(u, "NameSearchable"), $"%{term}%"));
+        }
+
+        query = query.OrderBy(u => u.Name);
 
         var totalCount = await query.CountAsync(cancellationToken);
 
         var users = await query
-        .Skip((pageNumber - 1) * pageSize)
-        .Take(pageSize)
-        .ToListAsync(cancellationToken);
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
 
         return (users, totalCount);
     }

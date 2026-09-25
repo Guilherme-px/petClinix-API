@@ -8,6 +8,7 @@ using PetClinix.Modules.Identity.Application.UseCases.UpdateStaff;
 using PetClinix.Modules.Identity.Application.UseCases.DeactivateStaff;
 using PetClinix.Modules.Identity.Domain.Enums;
 using System.Security.Claims;
+using PetClinix.Api.Extensions;
 
 namespace PetClinix.Api.Controllers;
 
@@ -101,15 +102,18 @@ public class ClinicsController : ControllerBase
 
     [Authorize(Roles = "Admin")]
     [HttpGet("me/staff")]
-    public async Task<IActionResult> GetStaff([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 1, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetStaff(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 1,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
     {
-        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
-        if (!Guid.TryParse(clinicIdClaim, out var clinicId))
+        if (!User.TryGetClinicId(out var clinicId))
         {
             return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
         }
 
-        var query = new GetStaffQuery(clinicId, pageNumber, pageSize);
+        var query = new GetStaffQuery(clinicId, pageNumber, pageSize, search ?? "");
         var result = await _getStaffHandler.Handle(query, cancellationToken);
 
         return Ok(result.Value);

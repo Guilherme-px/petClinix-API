@@ -18,11 +18,11 @@ public class IdentityDbContext : DbContext
         {
             entity.ToTable("Clinics");
             entity.HasKey(c => c.Id);
-            
+
             entity.Property(c => c.Slug).HasConversion(s => s.Value, v => Domain.ValueObjects.ClinicSlug.Create(v));
             entity.Property(c => c.Email).HasConversion(e => e.Value, v => Domain.ValueObjects.Email.Create(v));
             entity.Property(c => c.PhoneNumber).HasConversion(p => p.Value, v => Domain.ValueObjects.PhoneNumber.Create(v));
-            
+
             entity.Property(c => c.TradeName).HasMaxLength(150).IsRequired();
             entity.Property(c => c.LegalName).HasMaxLength(150).IsRequired();
             entity.Property(c => c.DocumentNumber).HasMaxLength(30).IsRequired();
@@ -39,16 +39,20 @@ public class IdentityDbContext : DbContext
         {
             entity.ToTable("Users");
             entity.HasKey(u => u.Id);
-            
+
             entity.Property(u => u.Email).HasConversion(e => e.Value, v => Domain.ValueObjects.Email.Create(v));
             entity.Property(u => u.PhoneNumber).HasConversion(p => p.Value, v => Domain.ValueObjects.PhoneNumber.Create(v));
-            
+
             entity.Property(u => u.Name).HasMaxLength(150).IsRequired();
             entity.Property(u => u.DocumentNumber).HasMaxLength(20).IsRequired();
             entity.Property(u => u.PasswordHash).HasMaxLength(255);
             entity.Property(u => u.BirthDate).IsRequired();
-            
+
+            entity.Property<string>("NameSearchable")
+                .HasComputedColumnSql("lower(f_unaccent(\"Name\"))", stored: true);
+
             entity.HasIndex(u => u.Email).IsUnique();
+            entity.HasIndex("NameSearchable");
         });
     }
 }
