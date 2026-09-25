@@ -33,7 +33,7 @@ public class ServiceRepository : IServiceRepository
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
-            query = query.Where(s => s.Name.ToLower().Contains(term.ToLower()));
+            query = query.Where(s => EF.Functions.ILike(s.Name, $"%{term}%"));
         }
 
         query = query.OrderBy(s => s.Name);
