@@ -78,32 +78,6 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
         return (email, password, userId, clinicId);
     }
 
-    private async Task<Guid> SetupTutorAsync(string token)
-    {
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-        var tutorRequest = new
-        {
-            Name = "Tutor do Pet",
-            Cpf = "12345678900",
-            Email = (string?)null,
-            PhoneNumber = "11988887777",
-            SecondaryPhoneNumber = (string?)null,
-            ZipCode = "01001000",
-            Street = "Rua Teste",
-            Number = "123",
-            Neighborhood = "Centro",
-            Complement = (string?)null,
-            City = "Sao Paulo",
-            State = "SP",
-            Notes = (string?)null
-        };
-
-        await _client.PostAsJsonAsync("/api/tutors", tutorRequest);
-        _client.DefaultRequestHeaders.Authorization = null;
-        return Guid.Empty;
-    }
-
     [Fact]
     public async Task RegisterPet_Should_Return_401_When_No_Token_Provided()
     {
@@ -283,6 +257,8 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
         result!.Items.Should().NotBeEmpty();
         result.TotalCount.Should().BeGreaterThanOrEqualTo(1);
         result.Items.Should().ContainSingle(p => p.Name == "Lista Pet Teste");
+        result.Items.First().Species.Should().Be("Dog");
+        result.Items.First().Sex.Should().Be("Male");
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
@@ -447,6 +423,8 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
         result.Should().NotBeNull();
         result!.Id.Should().Be(petId);
         result.Name.Should().Be("Pet Detalhe");
+        result.Species.Should().Be("Dog");
+        result.Sex.Should().Be("Female");
         result.IsNeutered.Should().BeFalse();
 
         _client.DefaultRequestHeaders.Authorization = null;
@@ -664,7 +642,7 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
         var (email, password, userId, clinicId) = await SetupAdminAsync();
         var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
         var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        
+
         _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
 
         var tutorRequest = new
@@ -742,10 +720,10 @@ public class PetItemResponse
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public int Species { get; set; }
+    public string Species { get; set; } = string.Empty;
     public string? Breed { get; set; }
     public DateOnly? BirthDate { get; set; }
-    public int Sex { get; set; }
+    public string Sex { get; set; } = string.Empty;
     public double? Weight { get; set; }
     public bool IsNeutered { get; set; }
 }
@@ -754,10 +732,10 @@ public class PetDetailResponse
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public int Species { get; set; }
+    public string Species { get; set; } = string.Empty;
     public string? Breed { get; set; }
     public DateOnly? BirthDate { get; set; }
-    public int Sex { get; set; }
+    public string Sex { get; set; } = string.Empty;
     public double? Weight { get; set; }
     public bool IsNeutered { get; set; }
 }
