@@ -367,7 +367,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         result.Should().NotBeNull();
         result!.Id.Should().Be(appointmentId);
         result.Notes.Should().Be("Agendamento para teste de detalhe");
-        result.Status.Should().Be(1);
+        result.Status.Should().Be("Scheduled");
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
@@ -490,7 +490,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
 
         _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
 
-        var statusRequest = new { NewStatus = 2 }; 
+        var statusRequest = new { NewStatus = 2 };
         var response = await _client.PatchAsJsonAsync($"/api/appointments/{Guid.NewGuid()}/status", statusRequest);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
@@ -541,7 +541,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
 
             updatedAppt.Should().NotBeNull();
             updatedAppt!.Status.Should().Be(PetClinix.Modules.Appointments.Domain.Enums.AppointmentStatus.Canceled);
-            updatedAppt.UpdatedByUserId.Should().Be(userId); 
+            updatedAppt.UpdatedByUserId.Should().Be(userId);
         }
 
         _client.DefaultRequestHeaders.Authorization = null;
@@ -565,7 +565,7 @@ public class AppointmentItemResponse
     public Guid VeterinarianId { get; set; }
     public DateTime ScheduledDateUtc { get; set; }
     public string? Notes { get; set; }
-    public int Status { get; set; }
+    public string Status { get; set; } = string.Empty;
 }
 
 public class AppointmentDetailResponse
@@ -577,5 +577,5 @@ public class AppointmentDetailResponse
     public Guid VeterinarianId { get; set; }
     public DateTime ScheduledDateUtc { get; set; }
     public string? Notes { get; set; }
-    public int Status { get; set; }
+    public string Status { get; set; } = string.Empty;
 }
