@@ -352,6 +352,21 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         result!.TotalCount.Should().Be(1);
         result.Items.Should().ContainSingle(s => s.Name == "João Veterinário");
     }
+
+    [Fact]
+    public async Task GetStaff_Should_Return_Role_As_String_When_Valid()
+    {
+        await AuthenticateAsync();
+
+        await RegisterStaffAsync("Dr. Teste Role", $"vet_{Guid.NewGuid()}@teste.com");
+
+        var response = await _client.GetAsync("/api/clinics/me/staff");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedStaffResponse>();
+        result!.Items.Should().NotBeEmpty();
+        result.Items.Should().OnlyContain(s => s.Role == "Veterinarian");
+    }
 }
 
 public class StaffItemResponse
@@ -359,6 +374,7 @@ public class StaffItemResponse
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
 }
 
 public class PagedStaffResponse
