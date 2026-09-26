@@ -62,13 +62,16 @@ using PetClinix.Modules.Appointments.Domain.Repositories;
 using PetClinix.Modules.Appointments.Infrastructure.Persistence;
 using PetClinix.Modules.Appointments.Infrastructure.Repositories;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Resend;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
