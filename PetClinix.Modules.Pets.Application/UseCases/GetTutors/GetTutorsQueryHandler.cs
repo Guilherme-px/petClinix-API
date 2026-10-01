@@ -25,6 +25,12 @@ public sealed class GetTutorsQueryHandler : ICommandHandler<GetTutorsQuery, Resu
             t.SecondaryPhoneNumber,
             t.City,
             t.State,
+            t.ZipCode,
+            t.Street,
+            t.Number,
+            t.Neighborhood,
+            t.Complement,
+            t.Notes,
             t.IsActive
         )).ToList();
 

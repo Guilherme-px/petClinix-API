@@ -28,8 +28,14 @@ public sealed class GetTutorByIdQueryHandler : ICommandHandler<GetTutorByIdQuery
             tutor.Email,
             tutor.PhoneNumber,
             tutor.SecondaryPhoneNumber,
+            tutor.ZipCode,
+            tutor.Street,
+            tutor.Number,
+            tutor.Neighborhood,
+            tutor.Complement,
             tutor.City,
             tutor.State,
+            tutor.Notes,
             tutor.IsActive
         );
 

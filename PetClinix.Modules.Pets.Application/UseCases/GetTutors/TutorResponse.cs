@@ -7,7 +7,13 @@ public sealed record TutorResponse(
     string? Email,
     string PhoneNumber,
     string? SecondaryPhoneNumber,
+    string ZipCode,
+    string Street,
+    string Number,
+    string Neighborhood,
+    string? Complement,
     string City,
-    string State,
+    string? State,
+    string? Notes,
     bool IsActive
 );
