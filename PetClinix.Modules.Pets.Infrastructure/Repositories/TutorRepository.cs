@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PetClinix.BuildingBlocks.Infrastructure;
 using PetClinix.Modules.Pets.Domain.Entities;
 using PetClinix.Modules.Pets.Domain.Repositories;
 using PetClinix.Modules.Pets.Domain.ValueObjects;
@@ -25,15 +26,27 @@ public class TutorRepository : ITutorRepository
         return await _context.Tutors.AnyAsync(t => t.ClinicId == clinicId && t.Cpf == cpf, cancellationToken);
     }
 
-    public async Task<(IEnumerable<Tutor> Tutors, int TotalCount)> GetAllByClinicIdAsync(Guid clinicId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(IEnumerable<Tutor> Tutors, int TotalCount)> GetAllByClinicIdAsync(
+        Guid clinicId, int pageNumber, int pageSize, string search = "",
+        CancellationToken cancellationToken = default)
     {
         var query = _context.Tutors
-            .Where(t => t.ClinicId == clinicId && t.IsActive)
-            .OrderBy(t => t.Name);
+            .Where(t => t.ClinicId == clinicId && t.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = TextSearch.Normalize(search);
+            query = query.Where(t => EF.Functions.ILike(
+                EF.Property<string>(t, "NameSearchable"), $"%{term}%"));
+        }
+
+        query = query.OrderBy(t => t.Name);
 
         var totalCount = await query.CountAsync(cancellationToken);
+
         var tutors = await query
             .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
         return (tutors, totalCount);

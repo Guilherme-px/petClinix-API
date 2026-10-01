@@ -62,7 +62,11 @@ public class TutorsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetTutors([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetTutors(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
     {
         var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
 
@@ -71,7 +75,7 @@ public class TutorsController : ControllerBase
             return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
         }
 
-        var query = new GetTutorsQuery(clinicId, pageNumber, pageSize);
+        var query = new GetTutorsQuery(clinicId, pageNumber, pageSize, search ?? "");
         var result = await _getTutorsHandler.Handle(query, cancellationToken);
 
         return Ok(result.Value);
