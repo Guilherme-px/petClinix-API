@@ -32,6 +32,14 @@ public class GetTutorsQueryHandlerTests
         );
     }
 
+    private static Tutor CreateDistinctTutor(Guid clinicId)
+    {
+        return Tutor.Create(
+            clinicId, Guid.NewGuid(), "Tutor Lista", "98765432100", "lista@teste.com", "11988887777", "1177776666",
+            "01002000", "Rua Listagem", "77", "Bairro Listagem", "Casa 2", "Cidade Listagem", "MG", "Nota da listagem"
+        );
+    }
+
     [Fact]
     public async Task Handle_Should_Return_PagedResult_With_Correct_Data()
     {
@@ -44,8 +52,9 @@ public class GetTutorsQueryHandlerTests
             CreateValidTutor(clinicId)
         };
 
-        _tutorRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<CancellationToken>())
-           .Returns((tutors, 2));
+        _tutorRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((tutors, 2));
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -63,7 +72,8 @@ public class GetTutorsQueryHandlerTests
         var clinicId = Guid.NewGuid();
         var query = new GetTutorsQuery(clinicId, 1, 10);
 
-        _tutorRepositoryMock.GetAllByClinicIdAsync(clinicId, 1, 10, Arg.Any<CancellationToken>())
+        _tutorRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((new List<Tutor>(), 0));
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -71,5 +81,68 @@ public class GetTutorsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_Should_Map_All_Fields_Correctly()
+    {
+        var clinicId = Guid.NewGuid();
+        var tutor = CreateDistinctTutor(clinicId);
+
+        var query = new GetTutorsQuery(clinicId, 1, 10);
+        _tutorRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, "", Arg.Any<CancellationToken>())
+            .Returns((new List<Tutor> { tutor }, 1));
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        var item = result.Value!.Items.Single();
+        item.Id.Should().Be(tutor.Id);
+        item.Name.Should().Be("Tutor Lista");
+        item.Cpf.Should().Be("98765432100");
+        item.Email.Should().Be("lista@teste.com");
+        item.PhoneNumber.Should().Be("11988887777");
+        item.SecondaryPhoneNumber.Should().Be("1177776666");
+        item.ZipCode.Should().Be("01002000");
+        item.Street.Should().Be("Rua Listagem");
+        item.Number.Should().Be("77");
+        item.Neighborhood.Should().Be("Bairro Listagem");
+        item.Complement.Should().Be("Casa 2");
+        item.City.Should().Be("Cidade Listagem");
+        item.State.Should().Be("MG");
+        item.Notes.Should().Be("Nota da listagem");
+        item.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Search_Term_To_Repository()
+    {
+        var clinicId = Guid.NewGuid();
+        var query = new GetTutorsQuery(clinicId, 1, 10, "maria");
+
+        _tutorRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, "maria", Arg.Any<CancellationToken>())
+            .Returns((new List<Tutor>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _tutorRepositoryMock.Received(1).GetAllByClinicIdAsync(
+            clinicId, 1, 10, "maria", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Empty_Search_When_Not_Provided()
+    {
+        var clinicId = Guid.NewGuid();
+        var query = new GetTutorsQuery(clinicId, 1, 10);
+
+        _tutorRepositoryMock.GetAllByClinicIdAsync(
+            clinicId, 1, 10, "", Arg.Any<CancellationToken>())
+            .Returns((new List<Tutor>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _tutorRepositoryMock.Received(1).GetAllByClinicIdAsync(
+            clinicId, 1, 10, "", Arg.Any<CancellationToken>());
     }
 }
