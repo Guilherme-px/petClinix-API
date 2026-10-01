@@ -73,4 +73,37 @@ public class GetTutorByIdQueryHandlerTests
         result.Value!.Id.Should().Be(tutor.Id);
         result.Value.Name.Should().Be(tutor.Name);
     }
+
+    [Fact]
+    public async Task Handle_Should_Map_All_Fields_Correctly_When_Success()
+    {
+        var clinicId = Guid.NewGuid();
+        var tutor = Tutor.Create(
+            clinicId, Guid.NewGuid(), "Tutor Mapeamento", "12345678900", "tutor@teste.com", "11999990000", "11988887777",
+            "01001000", "Rua Distinta", "42", "Bairro Diferente", "Apto 7", "Cidade Única", "RJ", "Observação única"
+        );
+
+        var query = new GetTutorByIdQuery(clinicId, tutor.Id);
+        _tutorRepositoryMock.GetByIdAsync(query.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.Id.Should().Be(tutor.Id);
+        result.Value.Name.Should().Be("Tutor Mapeamento");
+        result.Value.Cpf.Should().Be("12345678900");
+        result.Value.Email.Should().Be("tutor@teste.com");
+        result.Value.PhoneNumber.Should().Be("11999990000");
+        result.Value.SecondaryPhoneNumber.Should().Be("11988887777");
+        result.Value.ZipCode.Should().Be("01001000");
+        result.Value.Street.Should().Be("Rua Distinta");
+        result.Value.Number.Should().Be("42");
+        result.Value.Neighborhood.Should().Be("Bairro Diferente");
+        result.Value.Complement.Should().Be("Apto 7");
+        result.Value.City.Should().Be("Cidade Única");
+        result.Value.State.Should().Be("RJ");
+        result.Value.Notes.Should().Be("Observação única");
+        result.Value.IsActive.Should().BeTrue();
+    }
 }
