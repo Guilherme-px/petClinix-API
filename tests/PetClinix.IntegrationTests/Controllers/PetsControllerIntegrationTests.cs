@@ -706,6 +706,137 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
+
+    [Fact]
+    public async Task GetPets_Should_Find_Accented_Name_When_Searching_Without_Accents()
+    {
+        var (email, password, userId, clinicId) = await SetupAdminAsync();
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+
+        var tutorRequest = new
+        {
+            Name = "Tutor Acentos",
+            Cpf = "12345678900",
+            Email = (string?)null,
+            PhoneNumber = "11988887777",
+            SecondaryPhoneNumber = (string?)null,
+            ZipCode = "01001000",
+            Street = "Rua Teste",
+            Number = "123",
+            Neighborhood = "Centro",
+            Complement = (string?)null,
+            City = "Sao Paulo",
+            State = "SP",
+            Notes = (string?)null
+        };
+        await _client.PostAsJsonAsync("/api/tutors", tutorRequest);
+
+        Guid tutorId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+            var savedTutor = await petsDb.Tutors.FirstOrDefaultAsync(t => t.ClinicId == clinicId);
+            tutorId = savedTutor!.Id;
+        }
+
+        var firstPet = new
+        {
+            Name = "Sócrates",
+            Species = 1,
+            Breed = "SRD",
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = 1,
+            Weight = 8.0,
+            IsNeutered = true,
+            Notes = (string?)null
+        };
+        await _client.PostAsJsonAsync($"/api/tutors/{tutorId}/pets", firstPet);
+
+        var secondPet = new
+        {
+            Name = "Bolinha",
+            Species = 1,
+            Breed = "SRD",
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = 2,
+            Weight = 5.0,
+            IsNeutered = false,
+            Notes = (string?)null
+        };
+        await _client.PostAsJsonAsync($"/api/tutors/{tutorId}/pets", secondPet);
+
+        var response = await _client.GetAsync($"/api/tutors/{tutorId}/pets?search=socrates");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedPetResponse>();
+        result!.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(p => p.Name == "Sócrates");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetPets_Should_Return_Empty_When_Search_Has_No_Match()
+    {
+        var (email, password, userId, clinicId) = await SetupAdminAsync();
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+
+        var tutorRequest = new
+        {
+            Name = "Tutor Busca",
+            Cpf = "12345678900",
+            Email = (string?)null,
+            PhoneNumber = "11988887777",
+            SecondaryPhoneNumber = (string?)null,
+            ZipCode = "01001000",
+            Street = "Rua Teste",
+            Number = "123",
+            Neighborhood = "Centro",
+            Complement = (string?)null,
+            City = "Sao Paulo",
+            State = "SP",
+            Notes = (string?)null
+        };
+        await _client.PostAsJsonAsync("/api/tutors", tutorRequest);
+
+        Guid tutorId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+            var savedTutor = await petsDb.Tutors.FirstOrDefaultAsync(t => t.ClinicId == clinicId);
+            tutorId = savedTutor!.Id;
+        }
+
+        var petRequest = new
+        {
+            Name = "Bolinha",
+            Species = 1,
+            Breed = "SRD",
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = 1,
+            Weight = 5.0,
+            IsNeutered = true,
+            Notes = (string?)null
+        };
+        await _client.PostAsJsonAsync($"/api/tutors/{tutorId}/pets", petRequest);
+
+        var response = await _client.GetAsync($"/api/tutors/{tutorId}/pets?search=cirurgia");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedPetResponse>();
+        result!.TotalCount.Should().Be(0);
+        result.Items.Should().BeEmpty();
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
 }
 
 public class PagedPetResponse
