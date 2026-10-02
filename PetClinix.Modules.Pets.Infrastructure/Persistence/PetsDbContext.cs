@@ -34,6 +34,11 @@ public class PetsDbContext : DbContext
             entity.Property(t => t.Notes).HasMaxLength(1000);
             entity.HasIndex(t => new { t.ClinicId, t.Cpf }).IsUnique();
             entity.Property(t => t.CreatedByUserId).IsRequired();
+
+            entity.Property<string>("NameSearchable")
+                .HasComputedColumnSql("lower(f_unaccent(\"Name\"))", stored: true);
+
+            entity.HasIndex("NameSearchable");
         });
 
         modelBuilder.Entity<Pet>(entity =>
@@ -49,6 +54,11 @@ public class PetsDbContext : DbContext
             entity.Property(p => p.TutorId).IsRequired();
             entity.Property(p => p.CreatedByUserId).IsRequired();
             entity.HasIndex(p => new { p.TutorId, p.Name }).IsUnique();
+
+            entity.Property<string>("NameSearchable")
+                .HasComputedColumnSql("lower(f_unaccent(\"Name\"))", stored: true);
+
+            entity.HasIndex("NameSearchable");
         });
     }
 }
