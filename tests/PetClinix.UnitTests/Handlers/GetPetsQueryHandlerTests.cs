@@ -44,7 +44,8 @@ public class GetPetsQueryHandlerTests
             CreateValidPet(clinicId, tutorId)
         };
 
-        _petRepositoryMock.GetAllByTutorIdAsync(clinicId, tutorId, 1, 10, Arg.Any<CancellationToken>())
+        _petRepositoryMock.GetAllByTutorIdAsync(
+            clinicId, tutorId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((pets, 2));
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -64,7 +65,8 @@ public class GetPetsQueryHandlerTests
         var tutorId = Guid.NewGuid();
         var query = new GetPetsQuery(clinicId, tutorId, 1, 10);
 
-        _petRepositoryMock.GetAllByTutorIdAsync(clinicId, tutorId, 1, 10, Arg.Any<CancellationToken>())
+        _petRepositoryMock.GetAllByTutorIdAsync(
+            clinicId, tutorId, 1, 10, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((new List<Pet>(), 0));
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -72,5 +74,39 @@ public class GetPetsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Search_Term_To_Repository()
+    {
+        var clinicId = Guid.NewGuid();
+        var tutorId = Guid.NewGuid();
+        var query = new GetPetsQuery(clinicId, tutorId, 1, 10, "rex");
+
+        _petRepositoryMock.GetAllByTutorIdAsync(
+            clinicId, tutorId, 1, 10, "rex", Arg.Any<CancellationToken>())
+            .Returns((new List<Pet>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _petRepositoryMock.Received(1).GetAllByTutorIdAsync(
+            clinicId, tutorId, 1, 10, "rex", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_Pass_Empty_Search_When_Not_Provided()
+    {
+        var clinicId = Guid.NewGuid();
+        var tutorId = Guid.NewGuid();
+        var query = new GetPetsQuery(clinicId, tutorId, 1, 10);
+
+        _petRepositoryMock.GetAllByTutorIdAsync(
+            clinicId, tutorId, 1, 10, "", Arg.Any<CancellationToken>())
+            .Returns((new List<Pet>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _petRepositoryMock.Received(1).GetAllByTutorIdAsync(
+            clinicId, tutorId, 1, 10, "", Arg.Any<CancellationToken>());
     }
 }
