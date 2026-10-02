@@ -71,7 +71,12 @@ public class PetsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetPets(Guid tutorId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetPets(
+        Guid tutorId,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
     {
         var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
         if (!Guid.TryParse(clinicIdClaim, out var clinicId))
@@ -79,7 +84,7 @@ public class PetsController : ControllerBase
             return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
         }
 
-        var query = new GetPetsQuery(clinicId, tutorId, pageNumber, pageSize);
+        var query = new GetPetsQuery(clinicId, tutorId, pageNumber, pageSize, search ?? "");
         var result = await _getPetsHandler.Handle(query, cancellationToken);
 
         return Ok(result.Value);

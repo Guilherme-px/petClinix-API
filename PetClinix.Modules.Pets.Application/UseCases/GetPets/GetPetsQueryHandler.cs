@@ -14,7 +14,8 @@ public sealed class GetPetsQueryHandler : ICommandHandler<GetPetsQuery, Result<P
 
     public async Task<Result<PagedResult<PetResponse>>> Handle(GetPetsQuery query, CancellationToken cancellationToken)
     {
-        var (pets, totalCount) = await _petRepository.GetAllByTutorIdAsync(query.ClinicId, query.TutorId, query.PageNumber, query.PageSize, cancellationToken);
+        var (pets, totalCount) = await _petRepository.GetAllByTutorIdAsync(
+            query.ClinicId, query.TutorId, query.PageNumber, query.PageSize, query.Search, cancellationToken);
 
         var response = pets.Select(p => new PetResponse(
             p.Id,

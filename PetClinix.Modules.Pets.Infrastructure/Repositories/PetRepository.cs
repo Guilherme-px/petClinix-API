@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PetClinix.BuildingBlocks.Infrastructure;
 using PetClinix.Modules.Pets.Domain.Entities;
 using PetClinix.Modules.Pets.Domain.Repositories;
 using PetClinix.Modules.Pets.Infrastructure.Persistence;
@@ -29,11 +30,25 @@ public class PetRepository : IPetRepository
         return await _context.Pets.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
-    public async Task<(IEnumerable<Pet> Pets, int TotalCount)> GetAllByTutorIdAsync(Guid clinicId, Guid tutorId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(IEnumerable<Pet> Pets, int TotalCount)> GetAllByTutorIdAsync(
+        Guid clinicId,
+        Guid tutorId,
+        int pageNumber,
+        int pageSize,
+        string search = "",
+        CancellationToken cancellationToken = default)
     {
         var query = _context.Pets
-            .Where(p => p.ClinicId == clinicId && p.TutorId == tutorId && p.IsActive)
-            .OrderBy(p => p.Name);
+           .Where(p => p.ClinicId == clinicId && p.TutorId == tutorId && p.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = TextSearch.Normalize(search);
+            query = query.Where(p => EF.Functions.ILike(
+                EF.Property<string>(p, "NameSearchable"), $"%{term}%"));
+        }
+
+        query = query.OrderBy(p => p.Name);
 
         var totalCount = await query.CountAsync(cancellationToken);
 
