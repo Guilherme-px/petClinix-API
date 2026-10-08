@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PetClinix.Modules.Appointments.Domain.Entities;
+using PetClinix.Modules.Appointments.Domain.Enums;
 using PetClinix.Modules.Appointments.Domain.Repositories;
 using PetClinix.Modules.Appointments.Infrastructure.Persistence;
 
@@ -24,20 +25,21 @@ public class AppointmentRepository : IAppointmentRepository
         return await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
-    public async Task<List<Appointment>> GetByVeterinarianAndDateAsync(Guid veterinarianId, DateTime date, CancellationToken cancellationToken = default)
+    public async Task<List<Appointment>> GetByVeterinarianAndDateAsync(Guid veterinarianId, DateOnly date, CancellationToken cancellationToken = default)
     {
         return await _context.Appointments
             .Where(a => a.VeterinarianId == veterinarianId &&
-                        a.ScheduledDateUtc.Date == date.Date &&
-                        a.Status != Domain.Enums.AppointmentStatus.Canceled)
+                        a.ScheduledDate == date &&
+                        a.Status != AppointmentStatus.Canceled)
+            .OrderBy(a => a.ScheduledTime)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<(IEnumerable<Appointment> Appointments, int TotalCount)> GetAllByClinicAndDateAsync(Guid clinicId, DateTime date, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(IEnumerable<Appointment> Appointments, int TotalCount)> GetAllByClinicAndDateAsync(Guid clinicId, DateOnly date, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
         var query = _context.Appointments
-            .Where(a => a.ClinicId == clinicId && a.ScheduledDateUtc.Date == date.Date)
-            .OrderBy(a => a.ScheduledDateUtc);
+            .Where(a => a.ClinicId == clinicId && a.ScheduledDate == date)
+            .OrderBy(a => a.ScheduledTime);
 
         var totalCount = await query.CountAsync(cancellationToken);
 

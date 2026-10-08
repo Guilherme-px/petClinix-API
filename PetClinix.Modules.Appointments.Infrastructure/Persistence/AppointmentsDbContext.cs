@@ -22,11 +22,14 @@ public class AppointmentsDbContext : DbContext
             entity.Property(a => a.PetId).IsRequired();
             entity.Property(a => a.ServiceId).IsRequired();
             entity.Property(a => a.VeterinarianId).IsRequired();
-            entity.Property(a => a.ScheduledDateUtc).HasColumnType("timestamp with time zone").IsRequired();
+            entity.Property(a => a.ScheduledDate).HasColumnType("date").IsRequired();
+            entity.Property(a => a.ScheduledTime).HasColumnType("time").IsRequired();
             entity.Property(a => a.Status).IsRequired();
             entity.Property(a => a.Notes).HasMaxLength(1000);
             entity.Property(a => a.CreatedByUserId).IsRequired();
             entity.Property(a => a.RowVersion).IsRowVersion();
+            entity.HasIndex(a => new { a.VeterinarianId, a.ScheduledDate });
+            entity.HasIndex(a => new { a.ClinicId, a.ScheduledDate });
         });
     }
 }
