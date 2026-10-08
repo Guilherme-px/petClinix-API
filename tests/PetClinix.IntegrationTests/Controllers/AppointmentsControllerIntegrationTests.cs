@@ -78,6 +78,37 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         return (email, password, userId, clinicId);
     }
 
+    private async Task LoginAsync(string email, string password)
+    {
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+    }
+
+    private async Task<Guid> CreateServiceAsync(Guid clinicId, int durationMinutes = 30)
+    {
+        var serviceRequest = new
+        {
+            Name = $"Servico Appt {Guid.NewGuid().ToString().Substring(0, 8)}",
+            Description = "Servico para teste de agendamento",
+            DurationInMinutes = durationMinutes,
+            Price = 100.0m,
+            RequiresVeterinarian = true
+        };
+
+        await _client.PostAsJsonAsync("/api/services", serviceRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var savedService = await catalogDb.Services
+            .Where(s => s.ClinicId == clinicId)
+            .OrderByDescending(s => s.CreatedAtUtc)
+            .FirstOrDefaultAsync();
+        return savedService!.Id;
+    }
+
+    private static DateOnly FutureDate(int daysAhead) => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(daysAhead));
+
     [Fact]
     public async Task RegisterAppointment_Should_Return_401_When_No_Token_Provided()
     {
@@ -87,7 +118,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
             PetId = Guid.NewGuid(),
             ServiceId = Guid.NewGuid(),
             VeterinarianId = Guid.NewGuid(),
-            ScheduledDateUtc = DateTime.UtcNow.AddDays(1),
+            Date = FutureDate(1),
+            Time = new TimeOnly(10, 0),
             Notes = "Sem token"
         };
 
@@ -99,21 +131,21 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task RegisterAppointment_Should_Return_204_And_Save_In_Db_When_Valid()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
+        var serviceId = await CreateServiceAsync(clinicId);
         var vetId = Guid.NewGuid();
-        var scheduledDate = DateTime.UtcNow.AddDays(2);
+        var apptDate = FutureDate(2);
+        var apptTime = new TimeOnly(10, 0);
 
         var apptRequest = new
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
-            ServiceId = Guid.NewGuid(),
+            ServiceId = serviceId,
             VeterinarianId = vetId,
-            ScheduledDateUtc = scheduledDate,
+            Date = apptDate,
+            Time = apptTime,
             Notes = "Consulta de rotina"
         };
 
@@ -126,6 +158,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
 
         savedAppt.Should().NotBeNull();
         savedAppt!.ClinicId.Should().Be(clinicId);
+        savedAppt.ScheduledDate.Should().Be(apptDate);
+        savedAppt.ScheduledTime.Should().Be(apptTime);
         savedAppt.CreatedByUserId.Should().Be(userId);
         savedAppt.Status.Should().Be(PetClinix.Modules.Appointments.Domain.Enums.AppointmentStatus.Scheduled);
 
@@ -136,21 +170,21 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task RegisterAppointment_Should_Return_400_When_Double_Booking()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
+        var serviceId = await CreateServiceAsync(clinicId);
         var vetId = Guid.NewGuid();
-        var scheduledDate = DateTime.UtcNow.AddDays(3);
+        var apptDate = FutureDate(3);
+        var apptTime = new TimeOnly(10, 0);
 
         var apptRequest = new
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
-            ServiceId = Guid.NewGuid(),
+            ServiceId = serviceId,
             VeterinarianId = vetId,
-            ScheduledDateUtc = scheduledDate,
+            Date = apptDate,
+            Time = apptTime,
             Notes = "Primeiro agendamento"
         };
 
@@ -161,9 +195,10 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
-            ServiceId = Guid.NewGuid(),
+            ServiceId = serviceId,
             VeterinarianId = vetId,
-            ScheduledDateUtc = scheduledDate,
+            Date = apptDate,
+            Time = apptTime,
             Notes = "Tentativa de conflito"
         };
 
@@ -179,7 +214,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task GetAvailableSlots_Should_Return_401_When_No_Token_Provided()
     {
-        var response = await _client.GetAsync($"/api/appointments/available-slots?vetId={Guid.NewGuid()}&serviceId={Guid.NewGuid()}&date={DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)):yyyy-MM-dd}");
+        var response = await _client.GetAsync($"/api/appointments/available-slots?vetId={Guid.NewGuid()}&serviceId={Guid.NewGuid()}&date={FutureDate(1):yyyy-MM-dd}");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -187,46 +222,27 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task GetAvailableSlots_Should_Return_200_And_Skip_Conflicting_Slot()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var serviceRequest = new
-        {
-            Name = "Consulta Slots Test",
-            Description = "Teste de slot",
-            DurationInMinutes = 30,
-            Price = 100.0m,
-            RequiresVeterinarian = true
-        };
-        var serviceResponse = await _client.PostAsJsonAsync("/api/services", serviceRequest);
-
-        Guid serviceId;
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var savedService = await catalogDb.Services.FirstOrDefaultAsync(s => s.ClinicId == clinicId);
-            serviceId = savedService!.Id;
-        }
+        var serviceId = await CreateServiceAsync(clinicId, 30);
 
         var vetId = Guid.NewGuid();
-        var testDate = DateTime.UtcNow.AddDays(2);
-        var dateOnly = DateOnly.FromDateTime(testDate);
-        var apptDate = new DateTime(dateOnly.Year, dateOnly.Month, dateOnly.Day, 9, 0, 0, DateTimeKind.Utc);
+        var testDate = FutureDate(2);
+
         var apptRequest = new
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
             ServiceId = serviceId,
             VeterinarianId = vetId,
-            ScheduledDateUtc = apptDate,
+            Date = testDate,
+            Time = new TimeOnly(9, 0),
             Notes = "Ocupando slot das 09:00"
         };
         var apptResponse = await _client.PostAsJsonAsync("/api/appointments", apptRequest);
         apptResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var query = $"/api/appointments/available-slots?vetId={vetId}&serviceId={serviceId}&date={dateOnly:yyyy-MM-dd}";
+        var query = $"/api/appointments/available-slots?vetId={vetId}&serviceId={serviceId}&date={testDate:yyyy-MM-dd}";
         var response = await _client.GetAsync(query);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -244,8 +260,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task GetAppointments_Should_Return_401_When_No_Token_Provided()
     {
-        var date = DateTime.UtcNow.AddDays(1);
-        var response = await _client.GetAsync($"/api/appointments?date={date:yyyy-MM-ddTHH:mm:ssZ}");
+        var response = await _client.GetAsync($"/api/appointments?date={FutureDate(1):yyyy-MM-dd}");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -253,26 +268,25 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task GetAppointments_Should_Return_200_And_List_When_Appointments_Exist()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var tomorrow = DateTime.UtcNow.AddDays(1);
-        var apptDate = new DateTime(tomorrow.Year, tomorrow.Month, tomorrow.Day, 10, 0, 0, DateTimeKind.Utc);
+        var serviceId = await CreateServiceAsync(clinicId);
+        var apptDate = FutureDate(1);
+        var apptTime = new TimeOnly(10, 0);
 
         var apptRequest = new
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
-            ServiceId = Guid.NewGuid(),
+            ServiceId = serviceId,
             VeterinarianId = Guid.NewGuid(),
-            ScheduledDateUtc = apptDate,
+            Date = apptDate,
+            Time = apptTime,
             Notes = "Agendamento de teste para listagem"
         };
         await _client.PostAsJsonAsync("/api/appointments", apptRequest);
 
-        var response = await _client.GetAsync($"/api/appointments?date={tomorrow:yyyy-MM-ddTHH:mm:ssZ}");
+        var response = await _client.GetAsync($"/api/appointments?date={apptDate:yyyy-MM-dd}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -280,7 +294,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         result.Should().NotBeNull();
         result!.Items.Should().NotBeEmpty();
         result.TotalCount.Should().BeGreaterThanOrEqualTo(1);
-        result.Items.Should().ContainSingle(a => a.ScheduledDateUtc == apptDate);
+        result.Items.Should().ContainSingle(a => a.ScheduledDate == apptDate && a.ScheduledTime == apptTime);
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
@@ -289,13 +303,10 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task GetAppointments_Should_Return_200_And_Empty_List_When_No_Appointments()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
-        var emptyDate = DateTime.UtcNow.AddDays(10);
-        var response = await _client.GetAsync($"/api/appointments?date={emptyDate:yyyy-MM-ddTHH:mm:ssZ}");
+        var emptyDate = FutureDate(10);
+        var response = await _client.GetAsync($"/api/appointments?date={emptyDate:yyyy-MM-dd}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -318,10 +329,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task GetAppointmentById_Should_Return_404_When_Appointment_Does_Not_Exist()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await LoginAsync(email, password);
 
         var response = await _client.GetAsync($"/api/appointments/{Guid.NewGuid()}");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -333,20 +341,20 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task GetAppointmentById_Should_Return_200_And_Appointment_Data_When_Valid()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        var serviceId = await CreateServiceAsync(clinicId);
+        var apptDate = FutureDate(1);
+        var apptTime = new TimeOnly(11, 0);
 
-        var tomorrow = DateTime.UtcNow.AddDays(1);
-        var apptDate = new DateTime(tomorrow.Year, tomorrow.Month, tomorrow.Day, 11, 0, 0, DateTimeKind.Utc);
         var apptRequest = new
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
-            ServiceId = Guid.NewGuid(),
+            ServiceId = serviceId,
             VeterinarianId = Guid.NewGuid(),
-            ScheduledDateUtc = apptDate,
+            Date = apptDate,
+            Time = apptTime,
             Notes = "Agendamento para teste de detalhe"
         };
         await _client.PostAsJsonAsync("/api/appointments", apptRequest);
@@ -366,6 +374,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         var result = await response.Content.ReadFromJsonAsync<AppointmentDetailResponse>();
         result.Should().NotBeNull();
         result!.Id.Should().Be(appointmentId);
+        result.ScheduledDate.Should().Be(apptDate);
+        result.ScheduledTime.Should().Be(apptTime);
         result.Notes.Should().Be("Agendamento para teste de detalhe");
         result.Status.Should().Be("Scheduled");
 
@@ -379,7 +389,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         {
             VeterinarianId = Guid.NewGuid(),
             ServiceId = Guid.NewGuid(),
-            ScheduledDateUtc = DateTime.UtcNow.AddDays(2),
+            Date = FutureDate(2),
+            Time = new TimeOnly(10, 0),
             Notes = "Sem token"
         };
 
@@ -391,16 +402,14 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task UpdateAppointment_Should_Return_400_When_Appointment_Does_Not_Exist()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await LoginAsync(email, password);
 
         var updateRequest = new
         {
             VeterinarianId = Guid.NewGuid(),
             ServiceId = Guid.NewGuid(),
-            ScheduledDateUtc = DateTime.UtcNow.AddDays(2),
+            Date = FutureDate(2),
+            Time = new TimeOnly(10, 0),
             Notes = "Agendamento inexistente"
         };
 
@@ -417,15 +426,12 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task UpdateAppointment_Should_Return_204_And_Update_Db_When_Valid()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
-
+        var serviceId = await CreateServiceAsync(clinicId);
         var vetId = Guid.NewGuid();
-        var serviceId = Guid.NewGuid();
-        var tomorrow = DateTime.UtcNow.AddDays(1);
-        var initialDate = new DateTime(tomorrow.Year, tomorrow.Month, tomorrow.Day, 10, 0, 0, DateTimeKind.Utc);
+        var apptDate = FutureDate(1);
+        var initialTime = new TimeOnly(10, 0);
 
         var apptRequest = new
         {
@@ -433,7 +439,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
             PetId = Guid.NewGuid(),
             ServiceId = serviceId,
             VeterinarianId = vetId,
-            ScheduledDateUtc = initialDate,
+            Date = apptDate,
+            Time = initialTime,
             Notes = "Notas originais"
         };
         await _client.PostAsJsonAsync("/api/appointments", apptRequest);
@@ -446,12 +453,13 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
             appointmentId = savedAppt!.Id;
         }
 
-        var newDate = initialDate.AddHours(2);
+        var newTime = new TimeOnly(12, 0);
         var updateRequest = new
         {
             VeterinarianId = vetId,
             ServiceId = serviceId,
-            ScheduledDateUtc = newDate,
+            Date = apptDate,
+            Time = newTime,
             Notes = "Notas atualizadas via PUT"
         };
 
@@ -465,8 +473,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
 
             updatedAppt.Should().NotBeNull();
             updatedAppt!.Notes.Should().Be("Notas atualizadas via PUT");
-
-            updatedAppt.ScheduledDateUtc.ToString("yyyy-MM-dd HH:mm").Should().Be(newDate.ToString("yyyy-MM-dd HH:mm"));
+            updatedAppt.ScheduledDate.Should().Be(apptDate);
+            updatedAppt.ScheduledTime.Should().Be(newTime);
             updatedAppt.UpdatedByUserId.Should().Be(userId);
         }
 
@@ -485,10 +493,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task UpdateAppointmentStatus_Should_Return_400_When_Appointment_Does_Not_Exist()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        await LoginAsync(email, password);
 
         var statusRequest = new { NewStatus = 2 };
         var response = await _client.PatchAsJsonAsync($"/api/appointments/{Guid.NewGuid()}/status", statusRequest);
@@ -504,20 +509,19 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     public async Task UpdateAppointmentStatus_Should_Return_204_And_Update_Db_When_Valid()
     {
         var (email, password, userId, clinicId) = await SetupAdminAsync();
-        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        await LoginAsync(email, password);
 
-        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+        var serviceId = await CreateServiceAsync(clinicId);
+        var apptDate = FutureDate(1);
 
-        var tomorrow = DateTime.UtcNow.AddDays(1);
-        var apptDate = new DateTime(tomorrow.Year, tomorrow.Month, tomorrow.Day, 14, 0, 0, DateTimeKind.Utc);
         var apptRequest = new
         {
             TutorId = Guid.NewGuid(),
             PetId = Guid.NewGuid(),
-            ServiceId = Guid.NewGuid(),
+            ServiceId = serviceId,
             VeterinarianId = Guid.NewGuid(),
-            ScheduledDateUtc = apptDate,
+            Date = apptDate,
+            Time = new TimeOnly(14, 0),
             Notes = "Agendamento para mudar status"
         };
         await _client.PostAsJsonAsync("/api/appointments", apptRequest);
@@ -563,7 +567,8 @@ public class AppointmentItemResponse
     public Guid PetId { get; set; }
     public Guid ServiceId { get; set; }
     public Guid VeterinarianId { get; set; }
-    public DateTime ScheduledDateUtc { get; set; }
+    public DateOnly ScheduledDate { get; set; }
+    public TimeOnly ScheduledTime { get; set; }
     public string? Notes { get; set; }
     public string Status { get; set; } = string.Empty;
 }
@@ -575,7 +580,8 @@ public class AppointmentDetailResponse
     public Guid PetId { get; set; }
     public Guid ServiceId { get; set; }
     public Guid VeterinarianId { get; set; }
-    public DateTime ScheduledDateUtc { get; set; }
+    public DateOnly ScheduledDate { get; set; }
+    public TimeOnly ScheduledTime { get; set; }
     public string? Notes { get; set; }
     public string Status { get; set; } = string.Empty;
 }

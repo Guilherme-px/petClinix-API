@@ -29,7 +29,7 @@ public class UpdateAppointmentStatusCommandHandlerTests
     {
         return Appointment.Create(
             clinicId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            DateTime.UtcNow.AddDays(1), null, Guid.NewGuid()
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), new TimeOnly(10, 0), null, Guid.NewGuid()
         );
     }
 

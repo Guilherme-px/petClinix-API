@@ -25,7 +25,7 @@ public class GetAppointmentByIdQueryHandlerTests
     {
         return Appointment.Create(
             clinicId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            DateTime.UtcNow.AddDays(1), "Teste", Guid.NewGuid()
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), new TimeOnly(10, 0), "Teste", Guid.NewGuid()
         );
     }
 
@@ -64,7 +64,7 @@ public class GetAppointmentByIdQueryHandlerTests
         var clinicId = Guid.NewGuid();
         var appointment = CreateValidAppointment(clinicId);
         var query = new GetAppointmentByIdQuery(clinicId, appointment.Id);
-        
+
         _appointmentRepositoryMock.GetByIdAsync(query.AppointmentId, Arg.Any<CancellationToken>()).Returns(appointment);
 
         var result = await _handler.Handle(query, CancellationToken.None);

@@ -2,7 +2,6 @@ using FluentAssertions;
 using NSubstitute;
 using PetClinix.Modules.Appointments.Application.UseCases.GetAppointments;
 using PetClinix.Modules.Appointments.Domain.Entities;
-using PetClinix.Modules.Appointments.Domain.Enums;
 using PetClinix.Modules.Appointments.Domain.Repositories;
 using System;
 using System.Collections.Generic;
@@ -23,11 +22,11 @@ public class GetAppointmentsQueryHandlerTests
         _handler = new GetAppointmentsQueryHandler(_appointmentRepositoryMock);
     }
 
-    private static Appointment CreateValidAppointment(Guid clinicId, DateTime date)
+    private static Appointment CreateValidAppointment(Guid clinicId, DateOnly date)
     {
         return Appointment.Create(
             clinicId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            date, "Teste", Guid.NewGuid()
+            date, new TimeOnly(10, 0), "Teste", Guid.NewGuid()
         );
     }
 
@@ -35,7 +34,7 @@ public class GetAppointmentsQueryHandlerTests
     public async Task Handle_Should_Return_PagedResult_With_Correct_Data()
     {
         var clinicId = Guid.NewGuid();
-        var date = DateTime.UtcNow.AddDays(1);
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         var query = new GetAppointmentsQuery(clinicId, date, 1, 10);
 
         var appointments = new List<Appointment>
@@ -61,7 +60,7 @@ public class GetAppointmentsQueryHandlerTests
     public async Task Handle_Should_Return_Empty_List_When_No_Appointments_Exist()
     {
         var clinicId = Guid.NewGuid();
-        var date = DateTime.UtcNow.AddDays(1);
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         var query = new GetAppointmentsQuery(clinicId, date, 1, 10);
 
         _appointmentRepositoryMock.GetAllByClinicAndDateAsync(clinicId, date, 1, 10, Arg.Any<CancellationToken>())
