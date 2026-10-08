@@ -18,7 +18,7 @@ public class AppointmentsController : ControllerBase
 {
     private readonly ICommandHandler<RegisterAppointmentCommand, Result> _registerAppointmentHandler;
     private readonly ICommandHandler<GetAvailableSlotsQuery, Result<List<string>>> _getSlotsHandler;
-    private readonly ICommandHandler<GetAppointmentsQuery, Result<PagedResult<AppointmentResponse>>> _getAppointmentsHandler;
+    private readonly ICommandHandler<GetAppointmentsQuery, Result<List<AppointmentResponse>>> _getAppointmentsHandler;
     private readonly ICommandHandler<GetAppointmentByIdQuery, Result<AppointmentResponse>> _getAppointmentByIdHandler;
     private readonly ICommandHandler<UpdateAppointmentCommand, Result> _updateAppointmentHandler;
     private readonly ICommandHandler<UpdateAppointmentStatusCommand, Result> _updateStatusHandler;
@@ -26,7 +26,7 @@ public class AppointmentsController : ControllerBase
     public AppointmentsController(
         ICommandHandler<RegisterAppointmentCommand, Result> registerAppointmentHandler,
         ICommandHandler<GetAvailableSlotsQuery, Result<List<string>>> getSlotsHandler,
-        ICommandHandler<GetAppointmentsQuery, Result<PagedResult<AppointmentResponse>>> getAppointmentsHandler,
+        ICommandHandler<GetAppointmentsQuery, Result<List<AppointmentResponse>>> getAppointmentsHandler,
         ICommandHandler<GetAppointmentByIdQuery, Result<AppointmentResponse>> getAppointmentByIdHandler,
         ICommandHandler<UpdateAppointmentCommand, Result> updateAppointmentHandler,
         ICommandHandler<UpdateAppointmentStatusCommand, Result> updateStatusHandler)
@@ -85,7 +85,28 @@ public class AppointmentsController : ControllerBase
         return Ok(result.Value);
     }
 
-    [HttpGet("{appointmentId}")]
+    [HttpGet]
+    public async Task<IActionResult> GetAppointments([FromQuery] DateOnly startDate, [FromQuery] DateOnly endDate, CancellationToken cancellationToken)
+    {
+        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
+
+        if (!Guid.TryParse(clinicIdClaim, out var clinicId))
+        {
+            return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
+        }
+
+        var query = new GetAppointmentsQuery(clinicId, startDate, endDate);
+        var result = await _getAppointmentsHandler.Handle(query, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return BadRequest(new { result.ErrorCode, result.ErrorMessage });
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpGet("{appointmentId:guid}")]
     public async Task<IActionResult> GetAppointmentById(Guid appointmentId, CancellationToken cancellationToken)
     {
         var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
@@ -106,23 +127,7 @@ public class AppointmentsController : ControllerBase
         return Ok(result.Value);
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAppointments([FromQuery] DateOnly date, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
-    {
-        var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
-
-        if (!Guid.TryParse(clinicIdClaim, out var clinicId))
-        {
-            return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
-        }
-
-        var query = new GetAppointmentsQuery(clinicId, date, pageNumber, pageSize);
-        var result = await _getAppointmentsHandler.Handle(query, cancellationToken);
-
-        return Ok(result.Value);
-    }
-
-    [HttpPut("{appointmentId}")]
+    [HttpPut("{appointmentId:guid}")]
     public async Task<IActionResult> UpdateAppointment(Guid appointmentId, [FromBody] UpdateAppointmentRequest request, CancellationToken cancellationToken)
     {
         var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
@@ -148,7 +153,7 @@ public class AppointmentsController : ControllerBase
         return NoContent();
     }
 
-    [HttpPatch("{appointmentId}/status")]
+    [HttpPatch("{appointmentId:guid}/status")]
     public async Task<IActionResult> UpdateAppointmentStatus(Guid appointmentId, [FromBody] UpdateStatusRequest request, CancellationToken cancellationToken)
     {
         var clinicIdClaim = User.FindFirst("clinic_id")?.Value;

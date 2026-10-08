@@ -35,20 +35,13 @@ public class AppointmentRepository : IAppointmentRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<(IEnumerable<Appointment> Appointments, int TotalCount)> GetAllByClinicAndDateAsync(Guid clinicId, DateOnly date, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<List<Appointment>> GetAllByClinicAndDateRangeAsync(Guid clinicId, DateOnly startDate, DateOnly endDate, CancellationToken cancellationToken = default)
     {
-        var query = _context.Appointments
-            .Where(a => a.ClinicId == clinicId && a.ScheduledDate == date)
-            .OrderBy(a => a.ScheduledTime);
-
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        var appointments = await query
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+        return await _context.Appointments
+            .Where(a => a.ClinicId == clinicId && a.ScheduledDate >= startDate && a.ScheduledDate <= endDate)
+            .OrderBy(a => a.ScheduledDate)
+            .ThenBy(a => a.ScheduledTime)
             .ToListAsync(cancellationToken);
-
-        return (appointments, totalCount);
     }
 
     public async Task UpdateAsync(Appointment appointment, CancellationToken cancellationToken = default)

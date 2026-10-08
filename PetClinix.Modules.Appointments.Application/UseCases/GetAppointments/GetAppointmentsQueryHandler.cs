@@ -3,7 +3,7 @@ using PetClinix.Modules.Appointments.Domain.Repositories;
 
 namespace PetClinix.Modules.Appointments.Application.UseCases.GetAppointments;
 
-public sealed class GetAppointmentsQueryHandler : ICommandHandler<GetAppointmentsQuery, Result<PagedResult<AppointmentResponse>>>
+public sealed class GetAppointmentsQueryHandler : ICommandHandler<GetAppointmentsQuery, Result<List<AppointmentResponse>>>
 {
     private readonly IAppointmentRepository _appointmentRepository;
 
@@ -12,9 +12,12 @@ public sealed class GetAppointmentsQueryHandler : ICommandHandler<GetAppointment
         _appointmentRepository = appointmentRepository;
     }
 
-    public async Task<Result<PagedResult<AppointmentResponse>>> Handle(GetAppointmentsQuery query, CancellationToken cancellationToken)
+    public async Task<Result<List<AppointmentResponse>>> Handle(GetAppointmentsQuery query, CancellationToken cancellationToken)
     {
-        var (appointments, totalCount) = await _appointmentRepository.GetAllByClinicAndDateAsync(query.ClinicId, query.Date, query.PageNumber, query.PageSize, cancellationToken);
+        if (query.StartDate > query.EndDate)
+            return Result<List<AppointmentResponse>>.Failure("appointments.appt.invalid_range", "A data inicial deve ser anterior à data final.");
+
+        var appointments = await _appointmentRepository.GetAllByClinicAndDateRangeAsync(query.ClinicId, query.StartDate, query.EndDate, cancellationToken);
 
         var response = appointments.Select(a => new AppointmentResponse(
             a.Id,
@@ -27,8 +30,6 @@ public sealed class GetAppointmentsQueryHandler : ICommandHandler<GetAppointment
             a.Notes,
             a.Status)).ToList();
 
-        var pagedResult = new PagedResult<AppointmentResponse>(response, totalCount, query.PageNumber, query.PageSize);
-
-        return Result<PagedResult<AppointmentResponse>>.Success(pagedResult);
+        return Result<List<AppointmentResponse>>.Success(response);
     }
 }

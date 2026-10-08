@@ -156,7 +156,7 @@ builder.Services.AddScoped<IAppointmentRepository, AppointmentRepository>();
 builder.Services.AddScoped<IAppointmentsUnitOfWork, PetClinix.Modules.Appointments.Infrastructure.Persistence.UnitOfWork>();
 builder.Services.AddScoped<ICommandHandler<RegisterAppointmentCommand, Result>, RegisterAppointmentCommandHandler>();
 builder.Services.AddScoped<ICommandHandler<GetAvailableSlotsQuery, Result<List<string>>>, GetAvailableSlotsQueryHandler>();
-builder.Services.AddScoped<ICommandHandler<GetAppointmentsQuery, Result<PagedResult<AppointmentResponse>>>, GetAppointmentsQueryHandler>();
+builder.Services.AddScoped<ICommandHandler<GetAppointmentsQuery, Result<List<AppointmentResponse>>>, GetAppointmentsQueryHandler>();
 builder.Services.AddScoped<ICommandHandler<GetAppointmentByIdQuery, Result<AppointmentResponse>>, GetAppointmentByIdQueryHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateAppointmentCommand, Result>, UpdateAppointmentCommandHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateAppointmentStatusCommand, Result>, UpdateAppointmentStatusCommandHandler>();
