@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PetClinix.BuildingBlocks.Application;
+using PetClinix.BuildingBlocks.Domain;
 using PetClinix.Modules.Appointments.Domain.Enums;
 using PetClinix.Modules.Appointments.Infrastructure.Persistence;
 
@@ -16,9 +17,10 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
 
     public async Task<bool> HasFutureAppointmentsForTutorAsync(Guid tutorId, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
-            a.TutorId == tutorId && a.ScheduledDateUtc >= now &&
+            a.TutorId == tutorId &&
+            (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
             cancellationToken
         );
@@ -26,9 +28,10 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
 
     public async Task<bool> HasFutureAppointmentsForPetAsync(Guid petId, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
-            a.PetId == petId && a.ScheduledDateUtc >= now &&
+            a.PetId == petId &&
+            (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
             cancellationToken
         );
@@ -36,9 +39,10 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
 
     public async Task<bool> HasFutureAppointmentsForVetAsync(Guid vetId, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
-            a.VeterinarianId == vetId && a.ScheduledDateUtc >= now &&
+            a.VeterinarianId == vetId &&
+            (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
             cancellationToken
         );
@@ -46,11 +50,18 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
 
     public async Task<bool> HasFutureAppointmentsForServiceAsync(Guid serviceId, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
-            a.ServiceId == serviceId && a.ScheduledDateUtc >= now &&
+            a.ServiceId == serviceId &&
+            (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
             cancellationToken
         );
+    }
+
+    private static (DateOnly Today, TimeOnly NowTime) GetClinicNow()
+    {
+        var now = ClinicClock.Now();
+        return (DateOnly.FromDateTime(now), TimeOnly.FromDateTime(now));
     }
 }

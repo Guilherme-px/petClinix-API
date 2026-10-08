@@ -52,7 +52,7 @@ public class AppointmentsController : ControllerBase
 
         var command = new RegisterAppointmentCommand(
             clinicId, request.TutorId, request.PetId, request.ServiceId, request.VeterinarianId,
-            request.ScheduledDateUtc, request.Notes, userId
+            request.Date, request.Time, request.Notes, userId
         );
 
         var result = await _registerAppointmentHandler.Handle(command, cancellationToken);
@@ -107,7 +107,7 @@ public class AppointmentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAppointments([FromQuery] DateTime date, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetAppointments([FromQuery] DateOnly date, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
     {
         var clinicIdClaim = User.FindFirst("clinic_id")?.Value;
 
@@ -135,7 +135,7 @@ public class AppointmentsController : ControllerBase
 
         var command = new UpdateAppointmentCommand(
             clinicId, appointmentId, userId,
-            request.VeterinarianId, request.ServiceId, request.ScheduledDateUtc, request.Notes
+            request.VeterinarianId, request.ServiceId, request.Date, request.Time, request.Notes
         );
 
         var result = await _updateAppointmentHandler.Handle(command, cancellationToken);
@@ -173,13 +173,14 @@ public class AppointmentsController : ControllerBase
 
 public record RegisterAppointmentRequest(
     Guid TutorId, Guid PetId, Guid ServiceId, Guid VeterinarianId,
-    DateTime ScheduledDateUtc, string? Notes
+    DateOnly Date, TimeOnly Time, string? Notes
 );
 
 public record UpdateAppointmentRequest(
     Guid VeterinarianId,
     Guid ServiceId,
-    DateTime ScheduledDateUtc,
+    DateOnly Date,
+    TimeOnly Time,
     string? Notes
 );
 
