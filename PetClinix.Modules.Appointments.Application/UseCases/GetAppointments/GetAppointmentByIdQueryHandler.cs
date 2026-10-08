@@ -27,7 +27,8 @@ public sealed class GetAppointmentByIdQueryHandler : ICommandHandler<GetAppointm
             appointment.PetId,
             appointment.ServiceId,
             appointment.VeterinarianId,
-            appointment.ScheduledDateUtc,
+            appointment.ScheduledDate,
+            appointment.ScheduledTime,
             appointment.Notes,
             appointment.Status
         );

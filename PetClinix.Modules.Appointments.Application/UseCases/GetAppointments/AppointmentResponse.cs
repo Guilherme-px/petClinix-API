@@ -8,7 +8,8 @@ public sealed record AppointmentResponse(
     Guid PetId,
     Guid ServiceId,
     Guid VeterinarianId,
-    DateTime ScheduledDateUtc,
+    DateOnly ScheduledDate,
+    TimeOnly ScheduledTime,
     string? Notes,
     AppointmentStatus Status
 );
