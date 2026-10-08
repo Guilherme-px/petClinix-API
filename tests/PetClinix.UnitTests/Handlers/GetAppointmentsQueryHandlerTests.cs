@@ -31,45 +31,52 @@ public class GetAppointmentsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Should_Return_PagedResult_With_Correct_Data()
+    public async Task Handle_Should_ReturnFailure_When_StartDate_Is_After_EndDate()
     {
-        var clinicId = Guid.NewGuid();
-        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var query = new GetAppointmentsQuery(clinicId, date, 1, 10);
-
-        var appointments = new List<Appointment>
-        {
-            CreateValidAppointment(clinicId, date),
-            CreateValidAppointment(clinicId, date)
-        };
-
-        _appointmentRepositoryMock.GetAllByClinicAndDateAsync(clinicId, date, 1, 10, Arg.Any<CancellationToken>())
-            .Returns((appointments, 2));
+        var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2));
+        var query = new GetAppointmentsQuery(Guid.NewGuid(), start, start.AddDays(-1));
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().NotBeNull();
-        result.Value!.Items.Should().HaveCount(2);
-        result.Value.TotalCount.Should().Be(2);
-        result.Value.PageNumber.Should().Be(1);
-        result.Value.PageSize.Should().Be(10);
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("appointments.appt.invalid_range");
     }
 
     [Fact]
-    public async Task Handle_Should_Return_Empty_List_When_No_Appointments_Exist()
+    public async Task Handle_Should_Return_All_Appointments_In_Range()
     {
         var clinicId = Guid.NewGuid();
-        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var query = new GetAppointmentsQuery(clinicId, date, 1, 10);
+        var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var end = start.AddDays(7);
 
-        _appointmentRepositoryMock.GetAllByClinicAndDateAsync(clinicId, date, 1, 10, Arg.Any<CancellationToken>())
-            .Returns((new List<Appointment>(), 0));
+        var appointments = new List<Appointment>
+        {
+            CreateValidAppointment(clinicId, start),
+            CreateValidAppointment(clinicId, end)
+        };
+
+        _appointmentRepositoryMock.GetAllByClinicAndDateRangeAsync(clinicId, start, end, Arg.Any<CancellationToken>())
+            .Returns(appointments);
+
+        var result = await _handler.Handle(new GetAppointmentsQuery(clinicId, start, end), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Handle_Should_Return_Empty_List_When_No_Appointments_In_Range()
+    {
+        var clinicId = Guid.NewGuid();
+        var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var query = new GetAppointmentsQuery(clinicId, start, start.AddDays(7));
+
+        _appointmentRepositoryMock.GetAllByClinicAndDateRangeAsync(clinicId, start, start.AddDays(7), Arg.Any<CancellationToken>())
+            .Returns(new List<Appointment>());
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Items.Should().BeEmpty();
-        result.Value.TotalCount.Should().Be(0);
+        result.Value!.Should().BeEmpty();
     }
 }

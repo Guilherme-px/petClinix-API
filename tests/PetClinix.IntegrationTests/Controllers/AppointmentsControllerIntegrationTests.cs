@@ -260,7 +260,8 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task GetAppointments_Should_Return_401_When_No_Token_Provided()
     {
-        var response = await _client.GetAsync($"/api/appointments?date={FutureDate(1):yyyy-MM-dd}");
+        var date = FutureDate(1);
+        var response = await _client.GetAsync($"/api/appointments?startDate={date:yyyy-MM-dd}&endDate={date:yyyy-MM-dd}");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -286,15 +287,13 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         };
         await _client.PostAsJsonAsync("/api/appointments", apptRequest);
 
-        var response = await _client.GetAsync($"/api/appointments?date={apptDate:yyyy-MM-dd}");
+        var response = await _client.GetAsync($"/api/appointments?startDate={apptDate:yyyy-MM-dd}&endDate={apptDate:yyyy-MM-dd}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedAppointmentResponse>();
+        var result = await response.Content.ReadFromJsonAsync<List<AppointmentItemResponse>>();
         result.Should().NotBeNull();
-        result!.Items.Should().NotBeEmpty();
-        result.TotalCount.Should().BeGreaterThanOrEqualTo(1);
-        result.Items.Should().ContainSingle(a => a.ScheduledDate == apptDate && a.ScheduledTime == apptTime);
+        result!.Should().ContainSingle(a => a.ScheduledDate == apptDate && a.ScheduledTime == apptTime);
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
@@ -305,15 +304,14 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         var (email, password, userId, clinicId) = await SetupAdminAsync();
         await LoginAsync(email, password);
 
-        var emptyDate = FutureDate(10);
-        var response = await _client.GetAsync($"/api/appointments?date={emptyDate:yyyy-MM-dd}");
+        var start = FutureDate(10);
+        var response = await _client.GetAsync($"/api/appointments?startDate={start:yyyy-MM-dd}&endDate={start.AddDays(5):yyyy-MM-dd}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedAppointmentResponse>();
+        var result = await response.Content.ReadFromJsonAsync<List<AppointmentItemResponse>>();
         result.Should().NotBeNull();
-        result!.Items.Should().BeEmpty();
-        result.TotalCount.Should().Be(0);
+        result!.Should().BeEmpty();
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
@@ -547,6 +545,23 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
             updatedAppt!.Status.Should().Be(PetClinix.Modules.Appointments.Domain.Enums.AppointmentStatus.Canceled);
             updatedAppt.UpdatedByUserId.Should().Be(userId);
         }
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetAppointments_Should_Return_400_When_StartDate_Is_After_EndDate()
+    {
+        var (email, password, userId, clinicId) = await SetupAdminAsync();
+        await LoginAsync(email, password);
+
+        var start = FutureDate(10);
+        var response = await _client.GetAsync($"/api/appointments?startDate={start:yyyy-MM-dd}&endDate={start.AddDays(-5):yyyy-MM-dd}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.invalid_range");
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
