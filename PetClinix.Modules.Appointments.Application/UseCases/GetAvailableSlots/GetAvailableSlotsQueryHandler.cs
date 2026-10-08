@@ -23,33 +23,36 @@ public sealed class GetAvailableSlotsQueryHandler : ICommandHandler<GetAvailable
     public async Task<Result<List<string>>> Handle(GetAvailableSlotsQuery query, CancellationToken cancellationToken)
     {
         var durationMinutes = await _serviceCatalogService.GetDurationInMinutesAsync(query.ServiceId, cancellationToken);
-        if (durationMinutes <= 0) return Result<List<string>>.Failure("appointments.slots.invalid_duration", "Duração do serviço inválida.");
+        if (durationMinutes <= 0)
+            return Result<List<string>>.Failure("appointments.slots.invalid_duration", "Duração do serviço inválida.");
 
         var (startTime, endTime) = _clinicScheduleService.GetWorkingHours();
-        var dateUtc = query.Date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var existingAppointments = await _appointmentRepository.GetByVeterinarianAndDateAsync(query.VeterinarianId, dateUtc, cancellationToken);
 
-        var busySlots = existingAppointments
-            .Select(a => new { Start = a.ScheduledDateUtc, End = a.ScheduledDateUtc.AddMinutes(durationMinutes) })
+        var appointments = await _appointmentRepository.GetByVeterinarianAndDateAsync(query.VeterinarianId, query.Date, cancellationToken);
+
+        var serviceIds = appointments.Select(a => a.ServiceId).Distinct().ToList();
+        var durations = await _serviceCatalogService.GetDurationsInMinutesAsync(serviceIds, cancellationToken);
+
+        var busyRanges = appointments
+            .Select(a =>
+            {
+                var apptDuration = durations.TryGetValue(a.ServiceId, out var d) ? d : 0;
+                return (Start: a.ScheduledTime, End: a.ScheduledTime.AddMinutes(apptDuration));
+            })
+            .Where(r => r.End > r.Start)
             .ToList();
 
         var availableSlots = new List<string>();
-        var slotStart = query.Date.ToDateTime(startTime, DateTimeKind.Utc);
+        var slotStart = startTime;
 
-        while (slotStart.TimeOfDay < endTime.ToTimeSpan())
+        while (slotStart.AddMinutes(durationMinutes) <= endTime)
         {
             var slotEnd = slotStart.AddMinutes(durationMinutes);
 
-            if (slotEnd.TimeOfDay > endTime.ToTimeSpan() && slotEnd.Date == slotStart.Date)
-                break;
-
-            bool hasConflict = busySlots.Any(busy =>
-                slotStart < busy.End && slotEnd > busy.Start);
+            var hasConflict = busyRanges.Any(b => slotStart < b.End && slotEnd > b.Start);
 
             if (!hasConflict)
-            {
                 availableSlots.Add(slotStart.ToString("HH:mm"));
-            }
 
             slotStart = slotEnd;
         }
