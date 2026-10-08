@@ -11,7 +11,8 @@ public sealed class Appointment : AggregateRoot
     public Guid PetId { get; private set; }
     public Guid ServiceId { get; private set; }
     public Guid VeterinarianId { get; private set; }
-    public DateTime ScheduledDateUtc { get; private set; }
+    public DateOnly ScheduledDate { get; private set; }
+    public TimeOnly ScheduledTime { get; private set; }
     public string? Notes { get; private set; }
     public AppointmentStatus Status { get; private set; }
     public Guid CreatedByUserId { get; private set; }
@@ -25,7 +26,7 @@ public sealed class Appointment : AggregateRoot
 
     private Appointment(
         Guid clinicId, Guid tutorId, Guid petId, Guid serviceId, Guid veterinarianId,
-        DateTime scheduledDateUtc, string? notes, Guid createdByUserId)
+        DateOnly scheduledDate, TimeOnly scheduledTime, string? notes, Guid createdByUserId)
     {
         if (clinicId == Guid.Empty) throw new AppointmentsDomainException("appointments.appt.clinic_id_required", "Clínica é obrigatória.");
         if (tutorId == Guid.Empty) throw new AppointmentsDomainException("appointments.appt.tutor_id_required", "Tutor é obrigatório.");
@@ -34,7 +35,7 @@ public sealed class Appointment : AggregateRoot
         if (veterinarianId == Guid.Empty) throw new AppointmentsDomainException("appointments.appt.vet_id_required", "Veterinário é obrigatório.");
         if (createdByUserId == Guid.Empty) throw new AppointmentsDomainException("appointments.appt.created_by_required", "Usuário criador é obrigatório.");
 
-        if (scheduledDateUtc <= DateTime.UtcNow)
+        if (scheduledDate.ToDateTime(scheduledTime) <= ClinicClock.Now())
             throw new AppointmentsDomainException("appointments.appt.past_date", "Não é possível agendar para uma data no passado.");
 
         Id = Guid.NewGuid();
@@ -43,7 +44,8 @@ public sealed class Appointment : AggregateRoot
         PetId = petId;
         ServiceId = serviceId;
         VeterinarianId = veterinarianId;
-        ScheduledDateUtc = scheduledDateUtc;
+        ScheduledDate = scheduledDate;
+        ScheduledTime = scheduledTime;
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
         CreatedByUserId = createdByUserId;
         Status = AppointmentStatus.Scheduled;
@@ -52,9 +54,9 @@ public sealed class Appointment : AggregateRoot
 
     public static Appointment Create(
         Guid clinicId, Guid tutorId, Guid petId, Guid serviceId, Guid veterinarianId,
-        DateTime scheduledDateUtc, string? notes, Guid createdByUserId)
+        DateOnly scheduledDate, TimeOnly scheduledTime, string? notes, Guid createdByUserId)
     {
-        return new Appointment(clinicId, tutorId, petId, serviceId, veterinarianId, scheduledDateUtc, notes, createdByUserId);
+        return new Appointment(clinicId, tutorId, petId, serviceId, veterinarianId, scheduledDate, scheduledTime, notes, createdByUserId);
     }
 
     public void Confirm(Guid updatedByUserId)
@@ -97,32 +99,34 @@ public sealed class Appointment : AggregateRoot
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
-    public void Reschedule(Guid updatedByUserId, DateTime newScheduledDateUtc)
+    public void Reschedule(Guid updatedByUserId, DateOnly newDate, TimeOnly newTime)
     {
         if (Status == AppointmentStatus.Completed || Status == AppointmentStatus.Canceled)
             throw new AppointmentsDomainException("appointments.appt.invalid_status", "Agendamentos concluídos ou cancelados não podem ser remarcados.");
 
-        if (newScheduledDateUtc <= DateTime.UtcNow)
+        if (newDate.ToDateTime(newTime) <= ClinicClock.Now())
             throw new AppointmentsDomainException("appointments.appt.past_date", "Não é possível remarcar para uma data no passado.");
 
-        ScheduledDateUtc = newScheduledDateUtc;
+        ScheduledDate = newDate;
+        ScheduledTime = newTime;
         Status = AppointmentStatus.Scheduled;
         UpdatedByUserId = updatedByUserId;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
     public void UpdateDetails(
-    Guid updatedByUserId, Guid veterinarianId, Guid serviceId, DateTime newScheduledDateUtc, string? notes)
+        Guid updatedByUserId, Guid veterinarianId, Guid serviceId, DateOnly newDate, TimeOnly newTime, string? notes)
     {
         if (Status == AppointmentStatus.Completed || Status == AppointmentStatus.Canceled)
             throw new AppointmentsDomainException("appointments.appt.invalid_status", "Agendamentos concluídos ou cancelados não podem ser editados.");
 
-        if (newScheduledDateUtc <= DateTime.UtcNow)
+        if (newDate.ToDateTime(newTime) <= ClinicClock.Now())
             throw new AppointmentsDomainException("appointments.appt.past_date", "Não é possível remarcar para uma data no passado.");
 
         VeterinarianId = veterinarianId;
         ServiceId = serviceId;
-        ScheduledDateUtc = newScheduledDateUtc;
+        ScheduledDate = newDate;
+        ScheduledTime = newTime;
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
 
         if (Status == AppointmentStatus.Confirmed)
