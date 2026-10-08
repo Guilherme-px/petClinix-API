@@ -289,12 +289,24 @@ public class MockClinicScheduleService : IClinicScheduleService
 public class CatalogServiceAdapter : IServiceCatalogService
 {
     private readonly CatalogDbContext _context;
+
     public CatalogServiceAdapter(CatalogDbContext context) => _context = context;
 
     public async Task<int> GetDurationInMinutesAsync(Guid serviceId, CancellationToken cancellationToken = default)
     {
         var service = await _context.Services.FindAsync([serviceId], cancellationToken);
         return service?.DurationInMinutes ?? 0;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, int>> GetDurationsInMinutesAsync(IReadOnlyCollection<Guid> serviceIds, CancellationToken cancellationToken = default)
+    {
+        if (serviceIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await _context.Services
+            .Where(s => serviceIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.DurationInMinutes })
+            .ToDictionaryAsync(x => x.Id, x => x.DurationInMinutes, cancellationToken);
     }
 }
 
