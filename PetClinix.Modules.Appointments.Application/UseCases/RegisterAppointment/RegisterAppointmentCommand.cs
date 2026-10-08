@@ -4,5 +4,5 @@ namespace PetClinix.Modules.Appointments.Application.UseCases.RegisterAppointmen
 
 public sealed record RegisterAppointmentCommand(
     Guid ClinicId, Guid TutorId, Guid PetId, Guid ServiceId, Guid VeterinarianId,
-    DateTime ScheduledDateUtc, string? Notes, Guid CreatedByUserId
+    DateOnly Date, TimeOnly Time, string? Notes, Guid CreatedByUserId
 ) : ICommand<Result>;

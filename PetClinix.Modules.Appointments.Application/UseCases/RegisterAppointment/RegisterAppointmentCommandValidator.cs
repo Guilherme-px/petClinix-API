@@ -10,7 +10,8 @@ public sealed class RegisterAppointmentCommandValidator : AbstractValidator<Regi
         RuleFor(x => x.PetId).NotEmpty();
         RuleFor(x => x.ServiceId).NotEmpty();
         RuleFor(x => x.VeterinarianId).NotEmpty();
-        RuleFor(x => x.ScheduledDateUtc).NotEmpty();
+        RuleFor(x => x.Date).NotEmpty();
+        RuleFor(x => x.Time).NotEmpty();
         RuleFor(x => x.Notes).MaximumLength(1000).When(x => !string.IsNullOrWhiteSpace(x.Notes));
     }
 }
