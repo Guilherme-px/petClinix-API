@@ -1,4 +1,5 @@
 using PetClinix.Modules.Identity.Domain.Entities;
+using PetClinix.Modules.Identity.Domain.Enums;
 using PetClinix.Modules.Identity.Domain.ValueObjects;
 
 namespace PetClinix.Modules.Identity.Domain.Repositories;
@@ -13,6 +14,7 @@ public interface IUserRepository
     Task<User?> GetByRefreshTokenAsync(string token, CancellationToken cancellationToken = default);
     Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<int> CountByClinicIdAsync(Guid clinicId, CancellationToken cancellationToken = default);
+    Task<List<User>> GetActiveByRoleAsync(Guid clinicId, UserRole role, CancellationToken cancellationToken = default);
     Task<(IEnumerable<User> Users, int TotalCount)> GetAllByClinicIdAsync(
         Guid clinicId,
         int pageNumber,

@@ -81,4 +81,12 @@ public class UserRepository : IUserRepository
 
         return (users, totalCount);
     }
+
+    public async Task<List<User>> GetActiveByRoleAsync(Guid clinicId, UserRole role, CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
+            .Where(u => u.ClinicId == clinicId && u.Role == role && u.IsActive)
+            .OrderBy(u => u.Name)
+            .ToListAsync(cancellationToken);
+    }
 }

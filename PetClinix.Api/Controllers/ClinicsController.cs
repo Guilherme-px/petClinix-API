@@ -22,6 +22,7 @@ public class ClinicsController : ControllerBase
     private readonly ICommandHandler<GetStaffByIdQuery, Result<StaffResponse>> _getStaffByIdHandler;
     private readonly ICommandHandler<UpdateStaffCommand, Result> _updateStaffHandler;
     private readonly ICommandHandler<DeactivateStaffCommand, Result> _deactivateStaffHandler;
+    private readonly ICommandHandler<GetVeterinariansQuery, Result<List<VeterinarianResponse>>> _getVeterinariansHandler;
 
     public ClinicsController(
         ICommandHandler<UpdateClinicCommand, Result> updateClinicHandler,
@@ -29,7 +30,8 @@ public class ClinicsController : ControllerBase
         ICommandHandler<GetStaffQuery, Result<PagedResult<StaffResponse>>> getStaffHandler,
         ICommandHandler<GetStaffByIdQuery, Result<StaffResponse>> getStaffByIdHandler,
         ICommandHandler<UpdateStaffCommand, Result> updateStaffHandler,
-         ICommandHandler<DeactivateStaffCommand, Result> deactivateStaffHandler)
+        ICommandHandler<DeactivateStaffCommand, Result> deactivateStaffHandler,
+        ICommandHandler<GetVeterinariansQuery, Result<List<VeterinarianResponse>>> getVeterinariansHandler)
     {
         _updateClinicHandler = updateClinicHandler;
         _registerStaffHandler = registerStaffHandler;
@@ -37,6 +39,7 @@ public class ClinicsController : ControllerBase
         _getStaffByIdHandler = getStaffByIdHandler;
         _updateStaffHandler = updateStaffHandler;
         _deactivateStaffHandler = deactivateStaffHandler;
+        _getVeterinariansHandler = getVeterinariansHandler;
     }
 
     [Authorize(Roles = "Admin")]
@@ -136,6 +139,21 @@ public class ClinicsController : ControllerBase
         {
             return NotFound(new { result.ErrorCode, result.ErrorMessage });
         }
+
+        return Ok(result.Value);
+    }
+
+    [Authorize]
+    [HttpGet("me/veterinarians")]
+    public async Task<IActionResult> GetVeterinarians(CancellationToken cancellationToken)
+    {
+        if (!User.TryGetClinicId(out var clinicId))
+        {
+            return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
+        }
+
+        var query = new GetVeterinariansQuery(clinicId);
+        var result = await _getVeterinariansHandler.Handle(query, cancellationToken);
 
         return Ok(result.Value);
     }

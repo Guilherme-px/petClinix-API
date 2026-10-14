@@ -164,6 +164,7 @@ builder.Services.AddScoped<IPetDependencyChecker, PetClinix.Modules.Pets.Infrast
 builder.Services.AddScoped<IAppointmentDependencyChecker, AppointmentDependencyChecker>();
 builder.Services.AddScoped<IBillingUnitOfWork, BillingUnitOfWork>();
 builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
+builder.Services.AddScoped<ICommandHandler<GetVeterinariansQuery, Result<List<VeterinarianResponse>>>, GetVeterinariansQueryHandler>();
 
 builder.Services.AddSingleton<IClinicScheduleService>(new MockClinicScheduleService());
 
