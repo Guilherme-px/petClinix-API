@@ -114,6 +114,55 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         return savedUser!.Id;
     }
 
+    private async Task<Guid> RegisterStaffWithRoleAsync(string name, string role)
+    {
+        var email = $"{role.ToLower()}_{Guid.NewGuid()}@teste.com";
+        var response = await _client.PostAsJsonAsync("/api/clinics/me/staff", new
+        {
+            Name = name,
+            Email = email,
+            DocumentNumber = Guid.NewGuid().ToString("N").Substring(0, 11),
+            PhoneNumber = "11999990000",
+            BirthDate = new DateOnly(1990, 1, 1),
+            Role = role
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(email);
+        var staff = await identityDb.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
+        return staff!.Id;
+    }
+
+    private async Task LoginStaffAsync(string staffEmail)
+    {
+        var tokenResponse = await _client.GetAsync($"/api/users/{staffEmail}/generate-reset-token");
+        var tokenResult = await tokenResponse.Content.ReadFromJsonAsync<TokenResponse>();
+        await _client.PostAsJsonAsync("/api/users/set-password", new
+        {
+            Token = tokenResult!.Token,
+            Password = "SenhaStaff@123"
+        });
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new
+        {
+            Email = staffEmail,
+            Password = "SenhaStaff@123"
+        });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+    }
+
+    private record VeterinarianItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private const string VETERINARIANS_URL = "/api/clinics/me/veterinarians";
+
     [Fact]
     public async Task RegisterStaff_Should_Return_401_When_No_Token_Provided()
     {
@@ -366,6 +415,91 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         var result = await response.Content.ReadFromJsonAsync<PagedStaffResponse>();
         result!.Items.Should().NotBeEmpty();
         result.Items.Should().OnlyContain(s => s.Role == "Veterinarian");
+    }
+
+    [Fact]
+    public async Task GetVeterinarians_Should_Return_401_When_No_Token_Provided()
+    {
+        var response = await _client.GetAsync(VETERINARIANS_URL);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetVeterinarians_Should_Return_Only_Veterinarians_With_Id_And_Name()
+    {
+        await AuthenticateAsync();
+
+        var vetId = await RegisterStaffWithRoleAsync("Dr. Vet Teste", "Veterinarian");
+        await RegisterStaffWithRoleAsync("Recep Teste", "Receptionist");
+
+        var response = await _client.GetAsync(VETERINARIANS_URL);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<List<VeterinarianItem>>();
+        result.Should().NotBeNull();
+        result!.Should().ContainSingle(v => v.Id == vetId && v.Name == "Dr. Vet Teste");
+        result.Should().NotContain(v => v.Name == "Recep Teste");
+    }
+
+    [Fact]
+    public async Task GetVeterinarians_Should_Return_Empty_List_When_Clinic_Has_No_Vets()
+    {
+        await AuthenticateAsync();
+
+        var response = await _client.GetAsync(VETERINARIANS_URL);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<List<VeterinarianItem>>();
+        result!.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetVeterinarians_Should_Exclude_Deactivated_Vets()
+    {
+        await AuthenticateAsync();
+
+        var vetId = await RegisterStaffWithRoleAsync("Dr. Desativado", "Veterinarian");
+        await _client.DeleteAsync($"/api/clinics/me/staff/{vetId}");
+
+        var response = await _client.GetAsync(VETERINARIANS_URL);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<List<VeterinarianItem>>();
+        result!.Should().NotContain(v => v.Id == vetId);
+    }
+
+    [Fact]
+    public async Task GetVeterinarians_Should_Return_200_For_Staff_Role_And_403_For_Staff_Listing()
+    {
+        await AuthenticateAsync();
+
+        var staffEmail = $"vet_{Guid.NewGuid()}@teste.com";
+        await RegisterStaffAsync("Dr. Autenticado", staffEmail);
+        await LoginStaffAsync(staffEmail);
+
+        var vetsResponse = await _client.GetAsync(VETERINARIANS_URL);
+        vetsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var staffResponse = await _client.GetAsync("/api/clinics/me/staff");
+        staffResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GetVeterinarians_Should_Scope_To_Own_Clinic_Only()
+    {
+        await AuthenticateAsync();
+        var firstVetId = await RegisterStaffWithRoleAsync("Dr. Minha Clinica", "Veterinarian");
+        _client.DefaultRequestHeaders.Authorization = null;
+
+        await AuthenticateAsync();
+        var secondVetId = await RegisterStaffWithRoleAsync("Dr. Outra Clinica", "Veterinarian");
+
+        var response = await _client.GetAsync(VETERINARIANS_URL);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<List<VeterinarianItem>>();
+        result!.Should().ContainSingle(v => v.Id == secondVetId);
+        result.Should().NotContain(v => v.Id == firstVetId);
     }
 }
 
