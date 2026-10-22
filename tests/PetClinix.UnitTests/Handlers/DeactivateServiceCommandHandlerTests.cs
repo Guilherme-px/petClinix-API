@@ -42,12 +42,36 @@ public class DeactivateServiceCommandHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Service_Does_Not_Exist()
     {
         var command = new DeactivateServiceCommand(Guid.NewGuid(), Guid.NewGuid());
-        _serviceRepositoryMock.GetByIdAsync(command.ServiceId, Arg.Any<CancellationToken>()).Returns((Service?)null);
+
+        _serviceRepositoryMock
+            .GetByIdAsync(command.ClinicId, command.ServiceId, Arg.Any<CancellationToken>())
+            .Returns((Service?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("catalog.service.not_found");
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnFailure_When_Service_Belongs_To_Another_Clinic()
+    {
+        var myClinicId = Guid.NewGuid();
+        var otherClinicId = Guid.NewGuid();
+        var service = CreateValidService(otherClinicId);
+        var command = new DeactivateServiceCommand(myClinicId, service.Id);
+
+        _serviceRepositoryMock
+            .GetByIdAsync(myClinicId, service.Id, Arg.Any<CancellationToken>())
+            .Returns((Service?)null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("catalog.service.not_found");
+
+        await _appointmentDependencyCheckerMock.DidNotReceive()
+            .HasFutureAppointmentsForServiceAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -57,8 +81,12 @@ public class DeactivateServiceCommandHandlerTests
         var service = CreateValidService(clinicId);
         var command = new DeactivateServiceCommand(clinicId, service.Id);
 
-        _serviceRepositoryMock.GetByIdAsync(command.ServiceId, Arg.Any<CancellationToken>()).Returns(service);
-        _appointmentDependencyCheckerMock.HasFutureAppointmentsForServiceAsync(service.Id, Arg.Any<CancellationToken>()).Returns(true);
+        _serviceRepositoryMock
+            .GetByIdAsync(command.ClinicId, command.ServiceId, Arg.Any<CancellationToken>())
+            .Returns(service);
+        _appointmentDependencyCheckerMock
+            .HasFutureAppointmentsForServiceAsync(service.Id, Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -73,8 +101,12 @@ public class DeactivateServiceCommandHandlerTests
         var service = CreateValidService(clinicId);
         var command = new DeactivateServiceCommand(clinicId, service.Id);
 
-        _serviceRepositoryMock.GetByIdAsync(command.ServiceId, Arg.Any<CancellationToken>()).Returns(service);
-        _appointmentDependencyCheckerMock.HasFutureAppointmentsForServiceAsync(service.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _serviceRepositoryMock
+            .GetByIdAsync(command.ClinicId, command.ServiceId, Arg.Any<CancellationToken>())
+            .Returns(service);
+        _appointmentDependencyCheckerMock
+            .HasFutureAppointmentsForServiceAsync(service.Id, Arg.Any<CancellationToken>())
+            .Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
