@@ -22,9 +22,9 @@ public sealed class DeactivateServiceCommandHandler : ICommandHandler<Deactivate
 
     public async Task<Result> Handle(DeactivateServiceCommand command, CancellationToken cancellationToken)
     {
-        var service = await _serviceRepository.GetByIdAsync(command.ServiceId, cancellationToken);
+        var service = await _serviceRepository.GetByIdAsync(command.ClinicId, command.ServiceId, cancellationToken);
 
-        if (service == null || service.ClinicId != command.ClinicId)
+        if (service == null)
         {
             return Result.Failure("catalog.service.not_found", "Serviço não encontrado nesta clínica.");
         }

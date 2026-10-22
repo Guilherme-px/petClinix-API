@@ -50,9 +50,10 @@ public class ServiceRepository : IServiceRepository
         return (services, totalCount);
     }
 
-    public async Task<Service?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Service?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Services.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        return await _context.Services
+            .FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.Id == id, cancellationToken);
     }
 
     public async Task UpdateAsync(Service service, CancellationToken cancellationToken = default)
