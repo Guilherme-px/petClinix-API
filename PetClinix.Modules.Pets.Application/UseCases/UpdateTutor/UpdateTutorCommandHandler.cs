@@ -18,9 +18,9 @@ public sealed class UpdateTutorCommandHandler : ICommandHandler<UpdateTutorComma
 
     public async Task<Result> Handle(UpdateTutorCommand command, CancellationToken cancellationToken)
     {
-        var tutor = await _tutorRepository.GetByIdAsync(command.TutorId, cancellationToken);
+        var tutor = await _tutorRepository.GetByIdAsync(command.ClinicId, command.TutorId, cancellationToken);
 
-        if (tutor == null || tutor.ClinicId != command.ClinicId)
+        if (tutor == null)
         {
             return Result.Failure("pets.tutor.not_found", "Tutor não encontrado nesta clínica.");
         }

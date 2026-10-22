@@ -13,6 +13,6 @@ public interface ITutorRepository
         int pageSize,
         string search = "",
         CancellationToken cancellationToken = default);
-    Task<Tutor?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Tutor?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default);
     Task UpdateAsync(Tutor tutor, CancellationToken cancellationToken = default);
 }

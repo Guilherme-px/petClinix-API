@@ -25,14 +25,14 @@ public sealed class DeactivateTutorCommandHandler : ICommandHandler<DeactivateTu
 
     public async Task<Result> Handle(DeactivateTutorCommand command, CancellationToken cancellationToken)
     {
-        var tutor = await _tutorRepository.GetByIdAsync(command.TutorId, cancellationToken);
+        var tutor = await _tutorRepository.GetByIdAsync(command.ClinicId, command.TutorId, cancellationToken);
 
-        if (tutor == null || tutor.ClinicId != command.ClinicId)
+        if (tutor == null)
         {
             return Result.Failure("pets.tutor.not_found", "Tutor não encontrado nesta clínica.");
         }
 
-        if (await _petDependencyChecker.HasActivePetsByTutorAsync(tutor.Id, cancellationToken))
+        if (await _petDependencyChecker.HasActivePetsByTutorAsync(command.ClinicId, tutor.Id, cancellationToken))
         {
             return Result.Failure("pets.tutor.has_active_pets", "Não é possível desativar o tutor pois existem Pets ativos vinculados a ele. Desative ou transfira os pets primeiro.");
         }

@@ -52,9 +52,9 @@ public class TutorRepository : ITutorRepository
         return (tutors, totalCount);
     }
 
-    public async Task<Tutor?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Tutor?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Tutors.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        return await _context.Tutors.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Id == id, cancellationToken);
     }
 
     public async Task UpdateAsync(Tutor tutor, CancellationToken cancellationToken = default)

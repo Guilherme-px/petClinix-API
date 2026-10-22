@@ -20,14 +20,14 @@ public class PetRepository : IPetRepository
         await _context.Pets.AddAsync(pet, cancellationToken);
     }
 
-    public async Task<bool> ExistsByNameAndTutorAsync(Guid tutorId, string name, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsByNameAndTutorAsync(Guid clinicId, Guid tutorId, string name, CancellationToken cancellationToken = default)
     {
-        return await _context.Pets.AnyAsync(p => p.TutorId == tutorId && p.Name == name, cancellationToken);
+        return await _context.Pets.AnyAsync(p => p.ClinicId == clinicId && p.TutorId == tutorId && p.Name == name, cancellationToken);
     }
 
-    public async Task<Pet?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Pet?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Pets.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        return await _context.Pets.FirstOrDefaultAsync(p => p.ClinicId == clinicId && p.Id == id, cancellationToken);
     }
 
     public async Task<(IEnumerable<Pet> Pets, int TotalCount)> GetAllByTutorIdAsync(
@@ -65,8 +65,8 @@ public class PetRepository : IPetRepository
         _context.Pets.Update(pet);
     }
 
-    public async Task<bool> ExistsActiveByTutorIdAsync(Guid tutorId, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsActiveByTutorIdAsync(Guid clinicId, Guid tutorId, CancellationToken cancellationToken = default)
     {
-        return await _context.Pets.AnyAsync(p => p.TutorId == tutorId && p.IsActive, cancellationToken);
+        return await _context.Pets.AnyAsync(p => p.ClinicId == clinicId && p.TutorId == tutorId && p.IsActive, cancellationToken);
     }
 }

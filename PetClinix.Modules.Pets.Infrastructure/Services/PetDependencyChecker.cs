@@ -12,8 +12,8 @@ public class PetDependencyChecker : IPetDependencyChecker
         _petRepository = petRepository;
     }
 
-    public async Task<bool> HasActivePetsByTutorAsync(Guid tutorId, CancellationToken cancellationToken = default)
+    public async Task<bool> HasActivePetsByTutorAsync(Guid clinicId, Guid tutorId, CancellationToken cancellationToken = default)
     {
-        return await _petRepository.ExistsActiveByTutorIdAsync(tutorId, cancellationToken);
+        return await _petRepository.ExistsActiveByTutorIdAsync(clinicId, tutorId, cancellationToken);
     }
 }

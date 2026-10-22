@@ -14,9 +14,9 @@ public sealed class GetPetByIdQueryHandler : ICommandHandler<GetPetByIdQuery, Re
 
     public async Task<Result<PetResponse>> Handle(GetPetByIdQuery query, CancellationToken cancellationToken)
     {
-        var pet = await _petRepository.GetByIdAsync(query.PetId, cancellationToken);
-
-        if (pet == null || pet.ClinicId != query.ClinicId || pet.TutorId != query.TutorId)
+        var pet = await _petRepository.GetByIdAsync(query.ClinicId, query.PetId, cancellationToken);
+        
+        if (pet == null || pet.TutorId != query.TutorId)
         {
             return Result<PetResponse>.Failure("pets.pet.not_found", "Pet não encontrado para este tutor.");
         }

@@ -14,9 +14,9 @@ public sealed class GetTutorByIdQueryHandler : ICommandHandler<GetTutorByIdQuery
 
     public async Task<Result<TutorResponse>> Handle(GetTutorByIdQuery query, CancellationToken cancellationToken)
     {
-        var tutor = await _tutorRepository.GetByIdAsync(query.TutorId, cancellationToken);
-
-        if (tutor == null || tutor.ClinicId != query.ClinicId)
+        var tutor = await _tutorRepository.GetByIdAsync(query.ClinicId, query.TutorId, cancellationToken);
+        
+        if (tutor == null)
         {
             return Result<TutorResponse>.Failure("pets.tutor.not_found", "Tutor não encontrado nesta clínica.");
         }

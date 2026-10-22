@@ -24,14 +24,14 @@ public sealed class RegisterPetCommandHandler : ICommandHandler<RegisterPetComma
 
     public async Task<Result> Handle(RegisterPetCommand command, CancellationToken cancellationToken)
     {
-        var tutor = await _tutorRepository.GetByIdAsync(command.TutorId, cancellationToken);
+        var tutor = await _tutorRepository.GetByIdAsync(command.ClinicId, command.TutorId, cancellationToken);
 
-        if (tutor == null || tutor.ClinicId != command.ClinicId)
+        if (tutor == null)
         {
             return Result.Failure("pets.tutor.not_found", "Tutor não encontrado nesta clínica.");
         }
 
-        if (await _petRepository.ExistsByNameAndTutorAsync(command.TutorId, command.Name, cancellationToken))
+        if (await _petRepository.ExistsByNameAndTutorAsync(command.ClinicId, command.TutorId, command.Name, cancellationToken))
         {
             return Result.Failure("pets.pet.duplicate_name", "Já existe um pet com este nome cadastrado para este tutor.");
         }
