@@ -108,6 +108,20 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
         return savedService!.Id;
     }
 
+    private async Task<(Guid ClinicId, Guid UserId)> SetupClinicAsync()
+    {
+        _client.DefaultRequestHeaders.Authorization = null;
+
+        var (email, password, userId, clinicId) = await SetupAdminAsync();
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginResult!.Token);
+
+        return (clinicId, userId);
+    }
+
     [Fact]
     public async Task RegisterService_Should_Return_401_When_No_Token_Provided()
     {
@@ -369,6 +383,85 @@ public class ServicesControllerIntegrationTests : IClassFixture<CustomWebApplica
         var result = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
         result!.TotalCount.Should().Be(1);
         result.Items.Should().ContainSingle(s => s.Name == "Injeção");
+    }
+
+    [Fact]
+    public async Task UpdateService_Should_Not_Alter_Service_From_Another_Clinic()
+    {
+        var (clinicAId, _) = await SetupClinicAsync();
+        await RegisterServiceAsync("Vacina V10 A", "Somente clinica A", 30, 100.0m, true);
+        var serviceId = await GetFirstServiceIdAsync(clinicAId);
+
+        await SetupClinicAsync();
+
+        var response = await _client.PutAsJsonAsync($"/api/services/{serviceId}", new
+        {
+            Name = "Tentativa da B",
+            Description = "Deve falhar",
+            DurationInMinutes = 45,
+            Price = 250.0m,
+            RequiresVeterinarian = false
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        error!.ErrorCode.Should().Be("catalog.service.not_found");
+
+        using var scope = _factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        var service = await catalogDb.Services.FirstAsync(s => s.Id == serviceId);
+        service.Name.Should().Be("Vacina V10 A");
+        service.Price.Should().Be(100.0m);
+    }
+
+    [Fact]
+    public async Task DeactivateService_Should_Not_Deactivate_Service_From_Another_Clinic()
+    {
+        var (clinicAId, _) = await SetupClinicAsync();
+        await RegisterServiceAsync("Cirurgia A", "Somente clinica A", 60, 500.0m, true);
+        var serviceId = await GetFirstServiceIdAsync(clinicAId);
+
+        await SetupClinicAsync();
+
+        var response = await _client.DeleteAsync($"/api/services/{serviceId}");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>())!
+            .ErrorCode.Should().Be("catalog.service.not_found");
+
+        using var scope = _factory.Services.CreateScope();
+        var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+        (await catalogDb.Services.FirstAsync(s => s.Id == serviceId))
+            .IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetServices_Should_Not_Return_Services_From_Other_Clinics()
+    {
+        var (clinicAId, _) = await SetupClinicAsync();
+        await RegisterServiceAsync("Banho Exclusivo A", "Clinica A", 30, 50.0m, false);
+        var serviceAId = await GetFirstServiceIdAsync(clinicAId);
+
+        await SetupClinicAsync();
+        await RegisterServiceAsync("Tosa B", "Clinica B", 40, 60.0m, false);
+
+        var response = await _client.GetAsync("/api/services?pageNumber=1&pageSize=50");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<PagedServiceResponse>();
+        body!.Items.Should().NotContain(s => s.Id == serviceAId);
+        body.Items.Should().OnlyContain(s => s.Name == "Tosa B");
+    }
+
+    [Fact]
+    public async Task RegisterService_Should_Allow_Same_Name_Across_Different_Clinics()
+    {
+        var (clinicAId, _) = await SetupClinicAsync();
+        await RegisterServiceAsync("Vacina Comum", "Mesmo nome nas duas", 30, 80.0m, true);
+
+        await SetupClinicAsync();
+        var responseB = await RegisterServiceAsync("Vacina Comum", "Mesmo nome nas duas", 45, 90.0m, false);
+
+        responseB.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 }
 
