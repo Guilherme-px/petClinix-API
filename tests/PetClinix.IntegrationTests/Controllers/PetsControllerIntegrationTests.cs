@@ -78,6 +78,62 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
         return (email, password, userId, clinicId);
     }
 
+    private async Task<string> LoginAsync(string email, string password)
+    {
+        var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
+        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        return loginResult!.Token;
+    }
+
+    private async Task<Guid> CreateTutorAsync(Guid clinicId, string name, string cpf)
+    {
+        var tutorRequest = new
+        {
+            Name = name,
+            Cpf = cpf,
+            Email = (string?)null,
+            PhoneNumber = "11988887777",
+            SecondaryPhoneNumber = (string?)null,
+            ZipCode = "01001000",
+            Street = "Rua Teste",
+            Number = "123",
+            Neighborhood = "Centro",
+            Complement = (string?)null,
+            City = "Sao Paulo",
+            State = "SP",
+            Notes = (string?)null
+        };
+
+        await _client.PostAsJsonAsync("/api/tutors", tutorRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+        var savedTutor = await petsDb.Tutors.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Name == name);
+        return savedTutor!.Id;
+    }
+
+    private async Task<Guid> CreatePetAsync(Guid tutorId, string name)
+    {
+        var petRequest = new
+        {
+            Name = name,
+            Species = 1,
+            Breed = "SRD",
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = 1,
+            Weight = 10.0,
+            IsNeutered = true,
+            Notes = (string?)null
+        };
+
+        await _client.PostAsJsonAsync($"/api/tutors/{tutorId}/pets", petRequest);
+
+        using var scope = _factory.Services.CreateScope();
+        var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+        var savedPet = await petsDb.Pets.FirstOrDefaultAsync(p => p.TutorId == tutorId && p.Name == name);
+        return savedPet!.Id;
+    }
+
     [Fact]
     public async Task RegisterPet_Should_Return_401_When_No_Token_Provided()
     {
@@ -834,6 +890,172 @@ public class PetsControllerIntegrationTests : IClassFixture<CustomWebApplication
         var result = await response.Content.ReadFromJsonAsync<PagedPetResponse>();
         result!.TotalCount.Should().Be(0);
         result.Items.Should().BeEmpty();
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task RegisterPet_Should_Not_Register_Pet_In_Tutor_From_Another_Clinic()
+    {
+        var (emailA, passwordA, _, clinicIdA) = await SetupAdminAsync();
+        var (emailB, passwordB, _, _) = await SetupAdminAsync();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailA, passwordA));
+        var tutorIdA = await CreateTutorAsync(clinicIdA, "Tutor Clinica A", "11111111100");
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailB, passwordB));
+
+        var petRequest = new
+        {
+            Name = "Rex",
+            Species = 1,
+            Breed = "Vira Lata",
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = 1,
+            Weight = 15.5,
+            IsNeutered = true,
+            Notes = "Nenhuma"
+        };
+
+        var response = await _client.PostAsJsonAsync($"/api/tutors/{tutorIdA}/pets", petRequest);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("pets.tutor.not_found");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+            var pets = await petsDb.Pets.Where(p => p.TutorId == tutorIdA).ToListAsync();
+            pets.Should().BeEmpty();
+        }
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetPets_Should_Not_Return_Pets_From_Other_Clinics()
+    {
+        var (emailA, passwordA, _, clinicIdA) = await SetupAdminAsync();
+        var (emailB, passwordB, _, _) = await SetupAdminAsync();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailA, passwordA));
+        var tutorIdA = await CreateTutorAsync(clinicIdA, "Tutor Lista Cross", "22222222200");
+        await CreatePetAsync(tutorIdA, "Pet Da Clinica A");
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailB, passwordB));
+
+        var response = await _client.GetAsync($"/api/tutors/{tutorIdA}/pets");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedPetResponse>();
+        result!.TotalCount.Should().Be(0);
+        result.Items.Should().BeEmpty();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailA, passwordA));
+
+        var ownerResponse = await _client.GetAsync($"/api/tutors/{tutorIdA}/pets");
+        ownerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var ownerResult = await ownerResponse.Content.ReadFromJsonAsync<PagedPetResponse>();
+        ownerResult!.TotalCount.Should().Be(1);
+        ownerResult.Items.Should().ContainSingle(p => p.Name == "Pet Da Clinica A");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetPetById_Should_Not_Return_Pet_From_Another_Clinic()
+    {
+        var (emailA, passwordA, _, clinicIdA) = await SetupAdminAsync();
+        var (emailB, passwordB, _, _) = await SetupAdminAsync();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailA, passwordA));
+        var tutorIdA = await CreateTutorAsync(clinicIdA, "Tutor Detalhe Cross", "33333333300");
+        var petIdA = await CreatePetAsync(tutorIdA, "Pet Cross A");
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailB, passwordB));
+
+        var response = await _client.GetAsync($"/api/tutors/{tutorIdA}/pets/{petIdA}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("pets.pet.not_found");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task UpdatePet_Should_Not_Alter_Pet_From_Another_Clinic()
+    {
+        var (emailA, passwordA, _, clinicIdA) = await SetupAdminAsync();
+        var (emailB, passwordB, _, _) = await SetupAdminAsync();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailA, passwordA));
+        var tutorIdA = await CreateTutorAsync(clinicIdA, "Tutor Update Cross", "44444444400");
+        var petIdA = await CreatePetAsync(tutorIdA, "Pet Update Cross");
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailB, passwordB));
+
+        var updateRequest = new
+        {
+            Name = "Nome Invadido",
+            Species = 1,
+            Breed = "Labrador",
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = 1,
+            Weight = 99.0,
+            IsNeutered = false,
+            Notes = "Tentativa cross-clinic"
+        };
+
+        var response = await _client.PutAsJsonAsync($"/api/tutors/{tutorIdA}/pets/{petIdA}", updateRequest);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("pets.pet.not_found");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+            var untouchedPet = await petsDb.Pets.FirstOrDefaultAsync(p => p.Id == petIdA);
+
+            untouchedPet.Should().NotBeNull();
+            untouchedPet!.Name.Should().Be("Pet Update Cross");
+            untouchedPet.Weight.Should().Be(10.0);
+            untouchedPet.IsNeutered.Should().BeTrue();
+        }
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task DeactivatePet_Should_Not_Deactivate_Pet_From_Another_Clinic()
+    {
+        var (emailA, passwordA, _, clinicIdA) = await SetupAdminAsync();
+        var (emailB, passwordB, _, _) = await SetupAdminAsync();
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailA, passwordA));
+        var tutorIdA = await CreateTutorAsync(clinicIdA, "Tutor Delete Cross", "55555555500");
+        var petIdA = await CreatePetAsync(tutorIdA, "Pet Delete Cross");
+
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await LoginAsync(emailB, passwordB));
+
+        var response = await _client.DeleteAsync($"/api/tutors/{tutorIdA}/pets/{petIdA}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("pets.pet.not_found");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+            var stillActivePet = await petsDb.Pets.FirstOrDefaultAsync(p => p.Id == petIdA);
+
+            stillActivePet.Should().NotBeNull();
+            stillActivePet!.IsActive.Should().BeTrue();
+        }
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
