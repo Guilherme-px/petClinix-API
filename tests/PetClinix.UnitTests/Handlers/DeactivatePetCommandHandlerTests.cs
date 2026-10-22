@@ -44,7 +44,7 @@ public class DeactivatePetCommandHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Pet_Does_Not_Exist()
     {
         var command = new DeactivatePetCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        _petRepositoryMock.GetByIdAsync(command.PetId, Arg.Any<CancellationToken>()).Returns((Pet?)null);
+        _petRepositoryMock.GetByIdAsync(command.ClinicId, command.PetId, Arg.Any<CancellationToken>()).Returns((Pet?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -53,7 +53,7 @@ public class DeactivatePetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_When_Pet_Belongs_To_Another_Tutor_Or_Clinic()
+    public async Task Handle_Should_ReturnFailure_When_Pet_From_Another_Clinic_Is_Not_Returned_By_Repository()
     {
         var myClinicId = Guid.NewGuid();
         var myTutorId = Guid.NewGuid();
@@ -63,7 +63,26 @@ public class DeactivatePetCommandHandlerTests
         var pet = CreateValidPet(otherClinicId, otherTutorId);
 
         var command = new DeactivatePetCommand(myClinicId, myTutorId, pet.Id);
-        _petRepositoryMock.GetByIdAsync(command.PetId, Arg.Any<CancellationToken>()).Returns(pet);
+
+        _petRepositoryMock.GetByIdAsync(command.ClinicId, command.PetId, Arg.Any<CancellationToken>()).Returns((Pet?)null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("pets.pet.not_found");
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnFailure_When_Pet_Belongs_To_Another_Tutor()
+    {
+        var clinicId = Guid.NewGuid();
+        var myTutorId = Guid.NewGuid();
+        var otherTutorId = Guid.NewGuid();
+
+        var pet = CreateValidPet(clinicId, otherTutorId);
+
+        var command = new DeactivatePetCommand(clinicId, myTutorId, pet.Id);
+        _petRepositoryMock.GetByIdAsync(command.ClinicId, command.PetId, Arg.Any<CancellationToken>()).Returns(pet);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -79,7 +98,7 @@ public class DeactivatePetCommandHandlerTests
         var pet = CreateValidPet(clinicId, tutorId);
         var command = new DeactivatePetCommand(clinicId, tutorId, pet.Id);
 
-        _petRepositoryMock.GetByIdAsync(command.PetId, Arg.Any<CancellationToken>()).Returns(pet);
+        _petRepositoryMock.GetByIdAsync(command.ClinicId, command.PetId, Arg.Any<CancellationToken>()).Returns(pet);
         _appointmentDependencyCheckerMock.HasFutureAppointmentsForPetAsync(pet.Id, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -96,12 +115,14 @@ public class DeactivatePetCommandHandlerTests
         var pet = CreateValidPet(clinicId, tutorId);
         var command = new DeactivatePetCommand(clinicId, tutorId, pet.Id);
 
-        _petRepositoryMock.GetByIdAsync(command.PetId, Arg.Any<CancellationToken>()).Returns(pet);
+        _petRepositoryMock.GetByIdAsync(command.ClinicId, command.PetId, Arg.Any<CancellationToken>()).Returns(pet);
         _appointmentDependencyCheckerMock.HasFutureAppointmentsForPetAsync(pet.Id, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         pet.IsActive.Should().BeFalse();
+
+        await _petRepositoryMock.Received(1).GetByIdAsync(command.ClinicId, command.PetId, Arg.Any<CancellationToken>());
     }
 }

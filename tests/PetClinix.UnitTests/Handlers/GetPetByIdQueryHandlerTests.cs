@@ -33,7 +33,7 @@ public class GetPetByIdQueryHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Pet_Does_Not_Exist()
     {
         var query = new GetPetByIdQuery(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        _petRepositoryMock.GetByIdAsync(query.PetId, Arg.Any<CancellationToken>()).Returns((Pet?)null);
+        _petRepositoryMock.GetByIdAsync(query.ClinicId, query.PetId, Arg.Any<CancellationToken>()).Returns((Pet?)null);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -42,7 +42,7 @@ public class GetPetByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_When_Pet_Belongs_To_Another_Clinic()
+    public async Task Handle_Should_ReturnFailure_When_Pet_From_Another_Clinic_Is_Not_Returned_By_Repository()
     {
         var myClinicId = Guid.NewGuid();
         var otherClinicId = Guid.NewGuid();
@@ -51,7 +51,8 @@ public class GetPetByIdQueryHandlerTests
         var pet = CreateValidPet(otherClinicId, tutorId);
 
         var query = new GetPetByIdQuery(myClinicId, tutorId, pet.Id);
-        _petRepositoryMock.GetByIdAsync(query.PetId, Arg.Any<CancellationToken>()).Returns(pet);
+
+        _petRepositoryMock.GetByIdAsync(query.ClinicId, query.PetId, Arg.Any<CancellationToken>()).Returns((Pet?)null);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -66,10 +67,10 @@ public class GetPetByIdQueryHandlerTests
         var myTutorId = Guid.NewGuid();
         var otherTutorId = Guid.NewGuid();
 
-        var pet = CreateValidPet(clinicId, otherTutorId); 
+        var pet = CreateValidPet(clinicId, otherTutorId);
 
         var query = new GetPetByIdQuery(clinicId, myTutorId, pet.Id);
-        _petRepositoryMock.GetByIdAsync(query.PetId, Arg.Any<CancellationToken>()).Returns(pet);
+        _petRepositoryMock.GetByIdAsync(query.ClinicId, query.PetId, Arg.Any<CancellationToken>()).Returns(pet);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -85,7 +86,7 @@ public class GetPetByIdQueryHandlerTests
         var pet = CreateValidPet(clinicId, tutorId);
 
         var query = new GetPetByIdQuery(clinicId, tutorId, pet.Id);
-        _petRepositoryMock.GetByIdAsync(query.PetId, Arg.Any<CancellationToken>()).Returns(pet);
+        _petRepositoryMock.GetByIdAsync(query.ClinicId, query.PetId, Arg.Any<CancellationToken>()).Returns(pet);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -93,5 +94,7 @@ public class GetPetByIdQueryHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.Id.Should().Be(pet.Id);
         result.Value.Name.Should().Be(pet.Name);
+
+        await _petRepositoryMock.Received(1).GetByIdAsync(query.ClinicId, query.PetId, Arg.Any<CancellationToken>());
     }
 }

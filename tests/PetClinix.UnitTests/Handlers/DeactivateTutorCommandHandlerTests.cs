@@ -47,7 +47,7 @@ public class DeactivateTutorCommandHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Tutor_Does_Not_Exist()
     {
         var command = new DeactivateTutorCommand(Guid.NewGuid(), Guid.NewGuid());
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -62,8 +62,8 @@ public class DeactivateTutorCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = new DeactivateTutorCommand(clinicId, tutor.Id);
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
-        _petDependencyCheckerMock.HasActivePetsByTutorAsync(tutor.Id, Arg.Any<CancellationToken>()).Returns(true);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _petDependencyCheckerMock.HasActivePetsByTutorAsync(command.ClinicId, tutor.Id, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -78,8 +78,8 @@ public class DeactivateTutorCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = new DeactivateTutorCommand(clinicId, tutor.Id);
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
-        _petDependencyCheckerMock.HasActivePetsByTutorAsync(tutor.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _petDependencyCheckerMock.HasActivePetsByTutorAsync(command.ClinicId, tutor.Id, Arg.Any<CancellationToken>()).Returns(false);
         _appointmentDependencyCheckerMock.HasFutureAppointmentsForTutorAsync(tutor.Id, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -95,13 +95,15 @@ public class DeactivateTutorCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = new DeactivateTutorCommand(clinicId, tutor.Id);
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
-        _petDependencyCheckerMock.HasActivePetsByTutorAsync(tutor.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _petDependencyCheckerMock.HasActivePetsByTutorAsync(command.ClinicId, tutor.Id, Arg.Any<CancellationToken>()).Returns(false);
         _appointmentDependencyCheckerMock.HasFutureAppointmentsForTutorAsync(tutor.Id, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         tutor.IsActive.Should().BeFalse();
+
+        await _tutorRepositoryMock.Received(1).GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>());
     }
 }

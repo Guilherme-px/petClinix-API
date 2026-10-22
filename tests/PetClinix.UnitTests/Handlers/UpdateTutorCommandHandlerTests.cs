@@ -41,7 +41,7 @@ public class UpdateTutorCommandHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Tutor_Does_Not_Exist()
     {
         var command = CreateValidCommand(Guid.NewGuid(), Guid.NewGuid());
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -51,14 +51,15 @@ public class UpdateTutorCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_When_Tutor_Belongs_To_Another_Clinic()
+    public async Task Handle_Should_ReturnFailure_When_Tutor_From_Another_Clinic_Is_Not_Returned_By_Repository()
     {
         var myClinicId = Guid.NewGuid();
         var otherClinicId = Guid.NewGuid();
         var tutor = CreateValidTutor(otherClinicId);
 
         var command = CreateValidCommand(myClinicId, tutor.Id);
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -74,7 +75,7 @@ public class UpdateTutorCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = CreateValidCommand(clinicId, tutor.Id) with { Name = "" };
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -90,7 +91,7 @@ public class UpdateTutorCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = CreateValidCommand(clinicId, tutor.Id);
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -98,6 +99,7 @@ public class UpdateTutorCommandHandlerTests
         tutor.Name.Should().Be(command.Name);
         tutor.Street.Should().Be(command.Street);
 
+        await _tutorRepositoryMock.Received(1).GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>());
         await _tutorRepositoryMock.Received(1).UpdateAsync(Arg.Any<Tutor>(), Arg.Any<CancellationToken>());
         await _unitOfWorkMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

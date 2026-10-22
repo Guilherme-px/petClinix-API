@@ -33,7 +33,7 @@ public class GetTutorByIdQueryHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Tutor_Does_Not_Exist()
     {
         var query = new GetTutorByIdQuery(Guid.NewGuid(), Guid.NewGuid());
-        _tutorRepositoryMock.GetByIdAsync(query.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
+        _tutorRepositoryMock.GetByIdAsync(query.ClinicId, query.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -42,14 +42,15 @@ public class GetTutorByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_When_Tutor_Belongs_To_Another_Clinic()
+    public async Task Handle_Should_ReturnFailure_When_Tutor_From_Another_Clinic_Is_Not_Returned_By_Repository()
     {
         var myClinicId = Guid.NewGuid();
         var otherClinicId = Guid.NewGuid();
         var tutor = CreateValidTutor(otherClinicId);
 
         var query = new GetTutorByIdQuery(myClinicId, tutor.Id);
-        _tutorRepositoryMock.GetByIdAsync(query.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+
+        _tutorRepositoryMock.GetByIdAsync(query.ClinicId, query.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -64,7 +65,7 @@ public class GetTutorByIdQueryHandlerTests
         var tutor = CreateValidTutor(clinicId);
 
         var query = new GetTutorByIdQuery(clinicId, tutor.Id);
-        _tutorRepositoryMock.GetByIdAsync(query.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _tutorRepositoryMock.GetByIdAsync(query.ClinicId, query.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -72,6 +73,8 @@ public class GetTutorByIdQueryHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.Id.Should().Be(tutor.Id);
         result.Value.Name.Should().Be(tutor.Name);
+
+        await _tutorRepositoryMock.Received(1).GetByIdAsync(query.ClinicId, query.TutorId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -84,7 +87,7 @@ public class GetTutorByIdQueryHandlerTests
         );
 
         var query = new GetTutorByIdQuery(clinicId, tutor.Id);
-        _tutorRepositoryMock.GetByIdAsync(query.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _tutorRepositoryMock.GetByIdAsync(query.ClinicId, query.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 

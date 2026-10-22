@@ -42,7 +42,7 @@ public class RegisterPetCommandHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Tutor_Does_Not_Exist()
     {
         var command = CreateValidCommand(Guid.NewGuid(), Guid.NewGuid());
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -52,14 +52,15 @@ public class RegisterPetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Should_ReturnFailure_When_Tutor_Belongs_To_Another_Clinic()
+    public async Task Handle_Should_ReturnFailure_When_Tutor_From_Another_Clinic_Is_Not_Returned_By_Repository()
     {
         var myClinicId = Guid.NewGuid();
         var otherClinicId = Guid.NewGuid();
         var tutor = CreateValidTutor(otherClinicId);
 
         var command = CreateValidCommand(myClinicId, tutor.Id);
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns((Tutor?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -75,8 +76,8 @@ public class RegisterPetCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = CreateValidCommand(clinicId, tutor.Id);
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
-        _petRepositoryMock.ExistsByNameAndTutorAsync(command.TutorId, command.Name, Arg.Any<CancellationToken>()).Returns(true);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _petRepositoryMock.ExistsByNameAndTutorAsync(command.ClinicId, command.TutorId, command.Name, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -92,8 +93,8 @@ public class RegisterPetCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = CreateValidCommand(clinicId, tutor.Id) with { Name = "" };
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
-        _petRepositoryMock.ExistsByNameAndTutorAsync(command.TutorId, command.Name, Arg.Any<CancellationToken>()).Returns(false);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _petRepositoryMock.ExistsByNameAndTutorAsync(command.ClinicId, command.TutorId, command.Name, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -109,12 +110,14 @@ public class RegisterPetCommandHandlerTests
         var tutor = CreateValidTutor(clinicId);
         var command = CreateValidCommand(clinicId, tutor.Id);
 
-        _tutorRepositoryMock.GetByIdAsync(command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
-        _petRepositoryMock.ExistsByNameAndTutorAsync(command.TutorId, command.Name, Arg.Any<CancellationToken>()).Returns(false);
+        _tutorRepositoryMock.GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>()).Returns(tutor);
+        _petRepositoryMock.ExistsByNameAndTutorAsync(command.ClinicId, command.TutorId, command.Name, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+
+        await _tutorRepositoryMock.Received(1).GetByIdAsync(command.ClinicId, command.TutorId, Arg.Any<CancellationToken>());
         await _petRepositoryMock.Received(1).AddAsync(Arg.Any<Pet>(), Arg.Any<CancellationToken>());
         await _unitOfWorkMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
