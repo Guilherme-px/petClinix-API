@@ -37,7 +37,20 @@ public class UpdateAppointmentStatusCommandHandlerTests
     public async Task Handle_Should_ReturnFailure_When_Appointment_Does_Not_Exist()
     {
         var command = new UpdateAppointmentStatusCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), AppointmentStatus.Confirmed);
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("appointments.appt.not_found");
+        await _unitOfWorkMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnFailure_When_Appointment_Belongs_To_Another_Clinic()
+    {
+        var command = new UpdateAppointmentStatusCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), AppointmentStatus.Confirmed);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -55,7 +68,7 @@ public class UpdateAppointmentStatusCommandHandlerTests
 
         var command = new UpdateAppointmentStatusCommand(clinicId, appt.Id, Guid.NewGuid(), AppointmentStatus.Confirmed);
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -72,13 +85,14 @@ public class UpdateAppointmentStatusCommandHandlerTests
 
         var command = new UpdateAppointmentStatusCommand(clinicId, appt.Id, Guid.NewGuid(), AppointmentStatus.Confirmed);
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         appt.Status.Should().Be(AppointmentStatus.Confirmed);
 
+        await _appointmentRepositoryMock.Received(1).GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>());
         await _appointmentRepositoryMock.Received(1).UpdateAsync(Arg.Any<Appointment>(), Arg.Any<CancellationToken>());
         await _unitOfWorkMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

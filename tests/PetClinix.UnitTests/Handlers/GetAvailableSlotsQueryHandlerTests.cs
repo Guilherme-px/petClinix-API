@@ -36,19 +36,19 @@ public class GetAvailableSlotsQueryHandlerTests
 
     private void SetupQueryServiceDuration(int durationMinutes)
     {
-        _serviceCatalogServiceMock.GetDurationInMinutesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _serviceCatalogServiceMock.GetDurationInMinutesAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(durationMinutes);
     }
 
     private void SetupExistingDurations(Dictionary<Guid, int> durations)
     {
-        _serviceCatalogServiceMock.GetDurationsInMinutesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+        _serviceCatalogServiceMock.GetDurationsInMinutesAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(durations);
     }
 
     private void SetupAppointments(List<Appointment> appointments)
     {
-        _appointmentRepositoryMock.GetByVeterinarianAndDateAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _appointmentRepositoryMock.GetByVeterinarianAndDateAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(appointments);
     }
 
@@ -68,6 +68,7 @@ public class GetAvailableSlotsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
         result.Value.Should().BeEquivalentTo(new List<string> { "08:00", "08:30", "09:00", "09:30" });
+        await _appointmentRepositoryMock.Received(1).GetByVeterinarianAndDateAsync(query.ClinicId, query.VeterinarianId, date, Arg.Any<CancellationToken>());
     }
 
     [Fact]

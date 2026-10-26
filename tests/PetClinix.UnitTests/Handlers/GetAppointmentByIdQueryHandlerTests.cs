@@ -34,7 +34,8 @@ public class GetAppointmentByIdQueryHandlerTests
     {
         var query = new GetAppointmentByIdQuery(Guid.NewGuid(), Guid.NewGuid());
 
-        _appointmentRepositoryMock.GetByIdAsync(query.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
+        _appointmentRepositoryMock.GetByIdAsync(query.ClinicId, query.AppointmentId, Arg.Any<CancellationToken>())
+            .Returns((Appointment?)null);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -50,12 +51,14 @@ public class GetAppointmentByIdQueryHandlerTests
         var appointment = CreateValidAppointment(otherClinicId);
         var query = new GetAppointmentByIdQuery(myClinicId, appointment.Id);
 
-        _appointmentRepositoryMock.GetByIdAsync(query.AppointmentId, Arg.Any<CancellationToken>()).Returns(appointment);
+        _appointmentRepositoryMock.GetByIdAsync(otherClinicId, appointment.Id, Arg.Any<CancellationToken>())
+            .Returns(appointment);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("appointments.appt.not_found");
+        await _appointmentRepositoryMock.Received(1).GetByIdAsync(query.ClinicId, appointment.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -65,7 +68,8 @@ public class GetAppointmentByIdQueryHandlerTests
         var appointment = CreateValidAppointment(clinicId);
         var query = new GetAppointmentByIdQuery(clinicId, appointment.Id);
 
-        _appointmentRepositoryMock.GetByIdAsync(query.AppointmentId, Arg.Any<CancellationToken>()).Returns(appointment);
+        _appointmentRepositoryMock.GetByIdAsync(query.ClinicId, query.AppointmentId, Arg.Any<CancellationToken>())
+            .Returns(appointment);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -73,5 +77,6 @@ public class GetAppointmentByIdQueryHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.Id.Should().Be(appointment.Id);
         result.Value.Notes.Should().Be(appointment.Notes);
+        await _appointmentRepositoryMock.Received(1).GetByIdAsync(query.ClinicId, query.AppointmentId, Arg.Any<CancellationToken>());
     }
 }

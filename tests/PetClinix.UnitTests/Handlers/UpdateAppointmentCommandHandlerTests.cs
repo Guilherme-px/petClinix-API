@@ -17,6 +17,7 @@ public class UpdateAppointmentCommandHandlerTests
     private readonly IAppointmentRepository _appointmentRepositoryMock;
     private readonly IServiceCatalogService _serviceCatalogServiceMock;
     private readonly IClinicScheduleService _clinicScheduleServiceMock;
+    private readonly IAppointmentReferenceChecker _referenceCheckerMock;
     private readonly IAppointmentsUnitOfWork _unitOfWorkMock;
     private readonly UpdateAppointmentCommandHandler _handler;
 
@@ -25,8 +26,9 @@ public class UpdateAppointmentCommandHandlerTests
         _appointmentRepositoryMock = Substitute.For<IAppointmentRepository>();
         _serviceCatalogServiceMock = Substitute.For<IServiceCatalogService>();
         _clinicScheduleServiceMock = Substitute.For<IClinicScheduleService>();
+        _referenceCheckerMock = Substitute.For<IAppointmentReferenceChecker>();
         _unitOfWorkMock = Substitute.For<IAppointmentsUnitOfWork>();
-        _handler = new UpdateAppointmentCommandHandler(_appointmentRepositoryMock, _serviceCatalogServiceMock, _clinicScheduleServiceMock, _unitOfWorkMock);
+        _handler = new UpdateAppointmentCommandHandler(_appointmentRepositoryMock, _serviceCatalogServiceMock, _clinicScheduleServiceMock, _referenceCheckerMock, _unitOfWorkMock);
     }
 
     private static Appointment CreateValidAppointment(Guid clinicId)
@@ -44,7 +46,7 @@ public class UpdateAppointmentCommandHandlerTests
 
     private void SetupServiceDuration(int durationMinutes)
     {
-        _serviceCatalogServiceMock.GetDurationInMinutesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _serviceCatalogServiceMock.GetDurationInMinutesAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(durationMinutes);
     }
 
@@ -55,26 +57,65 @@ public class UpdateAppointmentCommandHandlerTests
 
     private void SetupExistingDurations(Dictionary<Guid, int> durations)
     {
-        _serviceCatalogServiceMock.GetDurationsInMinutesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+        _serviceCatalogServiceMock.GetDurationsInMinutesAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(durations);
     }
 
     private void SetupExistingAppointments(List<Appointment> appointments)
     {
-        _appointmentRepositoryMock.GetByVeterinarianAndDateAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _appointmentRepositoryMock.GetByVeterinarianAndDateAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(appointments);
+    }
+
+    private void SetupVeterinarianInClinic()
+    {
+        _referenceCheckerMock.VeterinarianExistsInClinicAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(true);
     }
 
     [Fact]
     public async Task Handle_Should_ReturnFailure_When_Appointment_Does_Not_Exist()
     {
         var command = CreateValidCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("appointments.appt.not_found");
+        await _unitOfWorkMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnFailure_When_Appointment_Belongs_To_Another_Clinic()
+    {
+        var command = CreateValidCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns((Appointment?)null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("appointments.appt.not_found");
+        await _unitOfWorkMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnFailure_When_Veterinarian_Belongs_To_Another_Clinic()
+    {
+        var clinicId = Guid.NewGuid();
+        var vetId = Guid.NewGuid();
+        var appt = CreateValidAppointment(clinicId);
+
+        var command = CreateValidCommand(clinicId, appt.Id, vetId);
+
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        SetupServiceDuration(30);
+        _referenceCheckerMock.VeterinarianExistsInClinicAsync(command.ClinicId, command.VeterinarianId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("appointments.appt.invalid_veterinarian");
         await _unitOfWorkMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -87,9 +128,10 @@ public class UpdateAppointmentCommandHandlerTests
 
         var command = CreateValidCommand(clinicId, appt.Id, vetId, new TimeOnly(19, 0));
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
         SetupServiceDuration(30);
         SetupWorkingHours();
+        SetupVeterinarianInClinic();
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -107,9 +149,10 @@ public class UpdateAppointmentCommandHandlerTests
 
         var command = CreateValidCommand(clinicId, appt.Id, vetId, new TimeOnly(17, 45));
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
         SetupServiceDuration(30);
         SetupWorkingHours();
+        SetupVeterinarianInClinic();
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -132,9 +175,10 @@ public class UpdateAppointmentCommandHandlerTests
             clinicId, Guid.NewGuid(), Guid.NewGuid(), conflictingServiceId, vetId,
             command.Date, command.Time, null, Guid.NewGuid());
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
         SetupServiceDuration(30);
         SetupWorkingHours();
+        SetupVeterinarianInClinic();
         SetupExistingDurations(new Dictionary<Guid, int> { [conflictingServiceId] = 30 });
         SetupExistingAppointments([conflictingAppt]);
 
@@ -155,9 +199,10 @@ public class UpdateAppointmentCommandHandlerTests
 
         var command = CreateValidCommand(clinicId, appt.Id, vetId);
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
         SetupServiceDuration(30);
         SetupWorkingHours();
+        SetupVeterinarianInClinic();
         SetupExistingDurations([]);
         SetupExistingAppointments([]);
 
@@ -177,9 +222,10 @@ public class UpdateAppointmentCommandHandlerTests
 
         var command = CreateValidCommand(clinicId, appt.Id, vetId);
 
-        _appointmentRepositoryMock.GetByIdAsync(command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
+        _appointmentRepositoryMock.GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>()).Returns(appt);
         SetupServiceDuration(30);
         SetupWorkingHours();
+        SetupVeterinarianInClinic();
         SetupExistingDurations([]);
         SetupExistingAppointments([]);
 
@@ -193,6 +239,7 @@ public class UpdateAppointmentCommandHandlerTests
         appt.ScheduledTime.Should().Be(command.Time);
         appt.UpdatedByUserId.Should().Be(command.UpdatedByUserId);
 
+        await _appointmentRepositoryMock.Received(1).GetByIdAsync(command.ClinicId, command.AppointmentId, Arg.Any<CancellationToken>());
         await _appointmentRepositoryMock.Received(1).UpdateAsync(Arg.Any<Appointment>(), Arg.Any<CancellationToken>());
         await _unitOfWorkMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

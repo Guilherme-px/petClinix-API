@@ -78,7 +78,7 @@ public class DeactivateStaffCommandHandlerTests
         var command = new DeactivateStaffCommand(clinicId, user.Id);
 
         _userRepositoryMock.GetByIdAsync(command.UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _appointmentDependencyCheckerMock.HasFutureAppointmentsForVetAsync(user.Id, Arg.Any<CancellationToken>()).Returns(true);
+        _appointmentDependencyCheckerMock.HasFutureAppointmentsForVetAsync(command.ClinicId, user.Id, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -94,7 +94,7 @@ public class DeactivateStaffCommandHandlerTests
         var command = new DeactivateStaffCommand(clinicId, user.Id);
 
         _userRepositoryMock.GetByIdAsync(command.UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _appointmentDependencyCheckerMock.HasFutureAppointmentsForVetAsync(user.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _appointmentDependencyCheckerMock.HasFutureAppointmentsForVetAsync(command.ClinicId, user.Id, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
