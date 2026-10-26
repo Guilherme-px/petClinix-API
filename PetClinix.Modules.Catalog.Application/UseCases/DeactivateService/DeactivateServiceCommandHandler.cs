@@ -29,7 +29,7 @@ public sealed class DeactivateServiceCommandHandler : ICommandHandler<Deactivate
             return Result.Failure("catalog.service.not_found", "Serviço não encontrado nesta clínica.");
         }
 
-        if (await _appointmentDependencyChecker.HasFutureAppointmentsForServiceAsync(service.Id, cancellationToken))
+        if (await _appointmentDependencyChecker.HasFutureAppointmentsForServiceAsync(command.ClinicId, service.Id, cancellationToken))
         {
             return Result.Failure("catalog.service.has_future_appointments", "Não é possível desativar o serviço pois existem agendamentos futuros vinculados a ele.");
         }

@@ -162,6 +162,7 @@ builder.Services.AddScoped<ICommandHandler<UpdateAppointmentCommand, Result>, Up
 builder.Services.AddScoped<ICommandHandler<UpdateAppointmentStatusCommand, Result>, UpdateAppointmentStatusCommandHandler>();
 builder.Services.AddScoped<IPetDependencyChecker, PetClinix.Modules.Pets.Infrastructure.Services.PetDependencyChecker>();
 builder.Services.AddScoped<IAppointmentDependencyChecker, AppointmentDependencyChecker>();
+builder.Services.AddScoped<IAppointmentReferenceChecker, AppointmentReferenceChecker>();
 builder.Services.AddScoped<IBillingUnitOfWork, BillingUnitOfWork>();
 builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 builder.Services.AddScoped<ICommandHandler<GetVeterinariansQuery, Result<List<VeterinarianResponse>>>, GetVeterinariansQueryHandler>();
@@ -296,19 +297,20 @@ public class CatalogServiceAdapter : IServiceCatalogService
 
     public CatalogServiceAdapter(CatalogDbContext context) => _context = context;
 
-    public async Task<int> GetDurationInMinutesAsync(Guid serviceId, CancellationToken cancellationToken = default)
+    public async Task<int> GetDurationInMinutesAsync(Guid clinicId, Guid serviceId, CancellationToken cancellationToken = default)
     {
-        var service = await _context.Services.FindAsync([serviceId], cancellationToken);
+        var service = await _context.Services
+            .FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.Id == serviceId, cancellationToken);
         return service?.DurationInMinutes ?? 0;
     }
 
-    public async Task<IReadOnlyDictionary<Guid, int>> GetDurationsInMinutesAsync(IReadOnlyCollection<Guid> serviceIds, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<Guid, int>> GetDurationsInMinutesAsync(Guid clinicId, IReadOnlyCollection<Guid> serviceIds, CancellationToken cancellationToken = default)
     {
         if (serviceIds.Count == 0)
             return new Dictionary<Guid, int>();
 
         return await _context.Services
-            .Where(s => serviceIds.Contains(s.Id))
+            .Where(s => s.ClinicId == clinicId && serviceIds.Contains(s.Id))
             .Select(s => new { s.Id, s.DurationInMinutes })
             .ToDictionaryAsync(x => x.Id, x => x.DurationInMinutes, cancellationToken);
     }

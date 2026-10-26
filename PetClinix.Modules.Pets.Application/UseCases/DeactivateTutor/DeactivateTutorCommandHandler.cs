@@ -37,7 +37,7 @@ public sealed class DeactivateTutorCommandHandler : ICommandHandler<DeactivateTu
             return Result.Failure("pets.tutor.has_active_pets", "Não é possível desativar o tutor pois existem Pets ativos vinculados a ele. Desative ou transfira os pets primeiro.");
         }
 
-        if (await _appointmentDependencyChecker.HasFutureAppointmentsForTutorAsync(tutor.Id, cancellationToken))
+        if (await _appointmentDependencyChecker.HasFutureAppointmentsForTutorAsync(command.ClinicId, tutor.Id, cancellationToken))
         {
             return Result.Failure("pets.tutor.has_future_appointments", "Não é possível desativar o tutor pois existem agendamentos futuros vinculados a ele. Cancele ou conclua os agendamentos primeiro.");
         }

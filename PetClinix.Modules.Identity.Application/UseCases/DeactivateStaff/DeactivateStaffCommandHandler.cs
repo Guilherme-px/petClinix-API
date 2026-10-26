@@ -34,7 +34,7 @@ public sealed class DeactivateStaffCommandHandler : ICommandHandler<DeactivateSt
             return Result.Failure("identity.user.cannot_deactivate_admin", "Não é possível desativar o perfil do Admin por esta rota.");
         }
 
-        if (await _appointmentDependencyChecker.HasFutureAppointmentsForVetAsync(user.Id, cancellationToken))
+        if (await _appointmentDependencyChecker.HasFutureAppointmentsForVetAsync(command.ClinicId, user.Id, cancellationToken))
         {
             return Result.Failure("identity.user.has_future_appointments", "Não é possível desativar o profissional pois existem agendamentos futuros vinculados a ele.");
         }

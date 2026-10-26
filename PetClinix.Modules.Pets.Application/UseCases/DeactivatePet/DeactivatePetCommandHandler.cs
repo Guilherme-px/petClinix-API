@@ -23,13 +23,13 @@ public sealed class DeactivatePetCommandHandler : ICommandHandler<DeactivatePetC
     public async Task<Result> Handle(DeactivatePetCommand command, CancellationToken cancellationToken)
     {
         var pet = await _petRepository.GetByIdAsync(command.ClinicId, command.PetId, cancellationToken);
-        
+
         if (pet == null || pet.TutorId != command.TutorId)
         {
             return Result.Failure("pets.pet.not_found", "Pet não encontrado para este tutor.");
         }
 
-        if (await _appointmentDependencyChecker.HasFutureAppointmentsForPetAsync(pet.Id, cancellationToken))
+        if (await _appointmentDependencyChecker.HasFutureAppointmentsForPetAsync(command.ClinicId, pet.Id, cancellationToken))
         {
             return Result.Failure("pets.pet.has_future_appointments", "Não é possível desativar o pet pois existem agendamentos futuros vinculados a ele.");
         }
@@ -41,4 +41,4 @@ public sealed class DeactivatePetCommandHandler : ICommandHandler<DeactivatePetC
 
         return Result.Success();
     }
-}
+}   

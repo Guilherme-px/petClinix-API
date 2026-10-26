@@ -15,10 +15,11 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
         _context = context;
     }
 
-    public async Task<bool> HasFutureAppointmentsForTutorAsync(Guid tutorId, CancellationToken cancellationToken = default)
+    public async Task<bool> HasFutureAppointmentsForTutorAsync(Guid clinicId, Guid tutorId, CancellationToken cancellationToken = default)
     {
         var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
+            a.ClinicId == clinicId &&
             a.TutorId == tutorId &&
             (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
@@ -26,10 +27,11 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
         );
     }
 
-    public async Task<bool> HasFutureAppointmentsForPetAsync(Guid petId, CancellationToken cancellationToken = default)
+    public async Task<bool> HasFutureAppointmentsForPetAsync(Guid clinicId, Guid petId, CancellationToken cancellationToken = default)
     {
         var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
+            a.ClinicId == clinicId &&
             a.PetId == petId &&
             (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
@@ -37,10 +39,11 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
         );
     }
 
-    public async Task<bool> HasFutureAppointmentsForVetAsync(Guid vetId, CancellationToken cancellationToken = default)
+    public async Task<bool> HasFutureAppointmentsForVetAsync(Guid clinicId, Guid vetId, CancellationToken cancellationToken = default)
     {
         var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
+            a.ClinicId == clinicId &&
             a.VeterinarianId == vetId &&
             (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
@@ -48,10 +51,11 @@ public class AppointmentDependencyChecker : IAppointmentDependencyChecker
         );
     }
 
-    public async Task<bool> HasFutureAppointmentsForServiceAsync(Guid serviceId, CancellationToken cancellationToken = default)
+    public async Task<bool> HasFutureAppointmentsForServiceAsync(Guid clinicId, Guid serviceId, CancellationToken cancellationToken = default)
     {
         var (today, nowTime) = GetClinicNow();
         return await _context.Appointments.AnyAsync(a =>
+            a.ClinicId == clinicId &&
             a.ServiceId == serviceId &&
             (a.ScheduledDate > today || (a.ScheduledDate == today && a.ScheduledTime >= nowTime)) &&
             (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.Confirmed),
