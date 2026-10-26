@@ -7,6 +7,7 @@ using PetClinix.Modules.Appointments.Infrastructure.Persistence;
 using PetClinix.Modules.Billing.Infrastructure.Persistence;
 using PetClinix.Modules.Catalog.Infrastructure.Persistence;
 using PetClinix.Modules.Identity.Infrastructure.Persistence;
+using PetClinix.Modules.Pets.Infrastructure.Persistence;
 using Xunit;
 
 namespace PetClinix.IntegrationTests.Controllers;
@@ -107,6 +108,114 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         return savedService!.Id;
     }
 
+    private async Task<Guid> CreateTutorAsync(Guid clinicId)
+    {
+        var tutorName = $"Tutor Appt {Guid.NewGuid().ToString().Substring(0, 8)}";
+
+        var tutorRequest = new
+        {
+            Name = tutorName,
+            Cpf = "52998224725",
+            Email = (string?)null,
+            PhoneNumber = "11999990000",
+            SecondaryPhoneNumber = (string?)null,
+            ZipCode = "01001000",
+            Street = "Rua Teste",
+            Number = "123",
+            Neighborhood = "Centro",
+            Complement = (string?)null,
+            City = "Sao Paulo",
+            State = "SP",
+            Notes = (string?)null
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/tutors", tutorRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        using var scope = _factory.Services.CreateScope();
+        var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+        var tutor = await petsDb.Tutors
+            .Where(t => t.ClinicId == clinicId && t.Name == tutorName)
+            .FirstOrDefaultAsync();
+        return tutor!.Id;
+    }
+
+    private async Task<Guid> CreatePetAsync(Guid tutorId)
+    {
+        var petName = $"Pet Appt {Guid.NewGuid().ToString().Substring(0, 8)}";
+
+        var petRequest = new
+        {
+            Name = petName,
+            Species = "Dog",
+            Breed = (string?)null,
+            BirthDate = new DateOnly(2020, 5, 10),
+            Sex = "Male",
+            Weight = 15.5,
+            IsNeutered = true,
+            Notes = (string?)null
+        };
+
+        var response = await _client.PostAsJsonAsync($"/api/tutors/{tutorId}/pets", petRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        using var scope = _factory.Services.CreateScope();
+        var petsDb = scope.ServiceProvider.GetRequiredService<PetsDbContext>();
+        var pet = await petsDb.Pets
+            .Where(p => p.TutorId == tutorId && p.Name == petName)
+            .FirstOrDefaultAsync();
+        return pet!.Id;
+    }
+
+    private async Task<Guid> CreateVeterinarianAsync()
+    {
+        var vetEmail = $"vet_{Guid.NewGuid()}@teste.com";
+
+        var vetRequest = new
+        {
+            Name = "Dr. Vet Appt",
+            Email = vetEmail,
+            DocumentNumber = Guid.NewGuid().ToString("N").Substring(0, 11),
+            PhoneNumber = "11999990000",
+            BirthDate = new DateOnly(1990, 1, 1),
+            Role = "Veterinarian"
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/clinics/me/staff", vetRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+        var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(vetEmail);
+        var vet = await identityDb.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
+        return vet!.Id;
+    }
+
+    private async Task<(Guid ClinicId, Guid ServiceId, Guid TutorId, Guid PetId, Guid VeterinarianId)> SetupAdminWithReferencesAsync()
+    {
+        var (email, password, userId, clinicId) = await SetupAdminAsync();
+        await LoginAsync(email, password);
+
+        var serviceId = await CreateServiceAsync(clinicId);
+        var tutorId = await CreateTutorAsync(clinicId);
+        var petId = await CreatePetAsync(tutorId);
+        var veterinarianId = await CreateVeterinarianAsync();
+
+        return (clinicId, serviceId, tutorId, petId, veterinarianId);
+    }
+
+    private Task<HttpResponseMessage> RegisterAppointmentAsync(Guid serviceId, Guid tutorId, Guid petId, Guid veterinarianId, DateOnly date, TimeOnly time, string notes) =>
+        _client.PostAsJsonAsync("/api/appointments", new
+        {
+            TutorId = tutorId,
+            PetId = petId,
+            ServiceId = serviceId,
+            VeterinarianId = veterinarianId,
+            Date = date,
+            Time = time,
+            Notes = notes
+        });
+
     private static DateOnly FutureDate(int daysAhead) => DateOnly.FromDateTime(DateTime.UtcNow.AddDays(daysAhead));
 
     [Fact]
@@ -134,22 +243,13 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         await LoginAsync(email, password);
 
         var serviceId = await CreateServiceAsync(clinicId);
-        var vetId = Guid.NewGuid();
+        var tutorId = await CreateTutorAsync(clinicId);
+        var petId = await CreatePetAsync(tutorId);
+        var vetId = await CreateVeterinarianAsync();
         var apptDate = FutureDate(2);
         var apptTime = new TimeOnly(10, 0);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = vetId,
-            Date = apptDate,
-            Time = apptTime,
-            Notes = "Consulta de rotina"
-        };
-
-        var response = await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        var response = await RegisterAppointmentAsync(serviceId, tutorId, petId, vetId, apptDate, apptTime, "Consulta de rotina");
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         using var scope = _factory.Services.CreateScope();
@@ -169,40 +269,14 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task RegisterAppointment_Should_Return_400_When_Double_Booking()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        await LoginAsync(email, password);
-
-        var serviceId = await CreateServiceAsync(clinicId);
-        var vetId = Guid.NewGuid();
+        var (clinicId, serviceId, tutorId, petId, veterinarianId) = await SetupAdminWithReferencesAsync();
         var apptDate = FutureDate(3);
         var apptTime = new TimeOnly(10, 0);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = vetId,
-            Date = apptDate,
-            Time = apptTime,
-            Notes = "Primeiro agendamento"
-        };
-
-        var firstResponse = await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        var firstResponse = await RegisterAppointmentAsync(serviceId, tutorId, petId, veterinarianId, apptDate, apptTime, "Primeiro agendamento");
         firstResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var secondRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = vetId,
-            Date = apptDate,
-            Time = apptTime,
-            Notes = "Tentativa de conflito"
-        };
-
-        var secondResponse = await _client.PostAsJsonAsync("/api/appointments", secondRequest);
+        var secondResponse = await RegisterAppointmentAsync(serviceId, tutorId, petId, veterinarianId, apptDate, apptTime, "Tentativa de conflito");
         secondResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var errorContent = await secondResponse.Content.ReadFromJsonAsync<ErrorResponse>();
@@ -221,28 +295,13 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task GetAvailableSlots_Should_Return_200_And_Skip_Conflicting_Slot()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        await LoginAsync(email, password);
-
-        var serviceId = await CreateServiceAsync(clinicId, 30);
-
-        var vetId = Guid.NewGuid();
+        var (clinicId, serviceId, tutorId, petId, veterinarianId) = await SetupAdminWithReferencesAsync();
         var testDate = FutureDate(2);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = vetId,
-            Date = testDate,
-            Time = new TimeOnly(9, 0),
-            Notes = "Ocupando slot das 09:00"
-        };
-        var apptResponse = await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        var apptResponse = await RegisterAppointmentAsync(serviceId, tutorId, petId, veterinarianId, testDate, new TimeOnly(9, 0), "Ocupando slot das 09:00");
         apptResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var query = $"/api/appointments/available-slots?vetId={vetId}&serviceId={serviceId}&date={testDate:yyyy-MM-dd}";
+        var query = $"/api/appointments/available-slots?vetId={veterinarianId}&serviceId={serviceId}&date={testDate:yyyy-MM-dd}";
         var response = await _client.GetAsync(query);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -268,24 +327,11 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task GetAppointments_Should_Return_200_And_List_When_Appointments_Exist()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        await LoginAsync(email, password);
-
-        var serviceId = await CreateServiceAsync(clinicId);
+        var (clinicId, serviceId, tutorId, petId, veterinarianId) = await SetupAdminWithReferencesAsync();
         var apptDate = FutureDate(1);
         var apptTime = new TimeOnly(10, 0);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = Guid.NewGuid(),
-            Date = apptDate,
-            Time = apptTime,
-            Notes = "Agendamento de teste para listagem"
-        };
-        await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        await RegisterAppointmentAsync(serviceId, tutorId, petId, veterinarianId, apptDate, apptTime, "Agendamento de teste para listagem");
 
         var response = await _client.GetAsync($"/api/appointments?startDate={apptDate:yyyy-MM-dd}&endDate={apptDate:yyyy-MM-dd}");
 
@@ -338,24 +384,11 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
     [Fact]
     public async Task GetAppointmentById_Should_Return_200_And_Appointment_Data_When_Valid()
     {
-        var (email, password, userId, clinicId) = await SetupAdminAsync();
-        await LoginAsync(email, password);
-
-        var serviceId = await CreateServiceAsync(clinicId);
+        var (clinicId, serviceId, tutorId, petId, veterinarianId) = await SetupAdminWithReferencesAsync();
         var apptDate = FutureDate(1);
         var apptTime = new TimeOnly(11, 0);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = Guid.NewGuid(),
-            Date = apptDate,
-            Time = apptTime,
-            Notes = "Agendamento para teste de detalhe"
-        };
-        await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        await RegisterAppointmentAsync(serviceId, tutorId, petId, veterinarianId, apptDate, apptTime, "Agendamento para teste de detalhe");
 
         Guid appointmentId;
         using (var scope = _factory.Services.CreateScope())
@@ -427,21 +460,13 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         await LoginAsync(email, password);
 
         var serviceId = await CreateServiceAsync(clinicId);
-        var vetId = Guid.NewGuid();
+        var tutorId = await CreateTutorAsync(clinicId);
+        var petId = await CreatePetAsync(tutorId);
+        var vetId = await CreateVeterinarianAsync();
         var apptDate = FutureDate(1);
         var initialTime = new TimeOnly(10, 0);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = vetId,
-            Date = apptDate,
-            Time = initialTime,
-            Notes = "Notas originais"
-        };
-        await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        await RegisterAppointmentAsync(serviceId, tutorId, petId, vetId, apptDate, initialTime, "Notas originais");
 
         Guid appointmentId;
         using (var scope = _factory.Services.CreateScope())
@@ -510,19 +535,12 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         await LoginAsync(email, password);
 
         var serviceId = await CreateServiceAsync(clinicId);
+        var tutorId = await CreateTutorAsync(clinicId);
+        var petId = await CreatePetAsync(tutorId);
+        var vetId = await CreateVeterinarianAsync();
         var apptDate = FutureDate(1);
 
-        var apptRequest = new
-        {
-            TutorId = Guid.NewGuid(),
-            PetId = Guid.NewGuid(),
-            ServiceId = serviceId,
-            VeterinarianId = Guid.NewGuid(),
-            Date = apptDate,
-            Time = new TimeOnly(14, 0),
-            Notes = "Agendamento para mudar status"
-        };
-        await _client.PostAsJsonAsync("/api/appointments", apptRequest);
+        await RegisterAppointmentAsync(serviceId, tutorId, petId, vetId, apptDate, new TimeOnly(14, 0), "Agendamento para mudar status");
 
         Guid appointmentId;
         using (var scope = _factory.Services.CreateScope())
@@ -562,6 +580,220 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
 
         var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         errorContent!.ErrorCode.Should().Be("appointments.appt.invalid_range");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task RegisterAppointment_Should_Return_400_When_Service_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, _, _, _) = await SetupAdminWithReferencesAsync();
+        var (_, serviceIdB, tutorIdB, petIdB, vetIdB) = await SetupAdminWithReferencesAsync();
+
+        var response = await RegisterAppointmentAsync(serviceIdA, tutorIdB, petIdB, vetIdB, FutureDate(1), new TimeOnly(10, 0), "Servico de outra clinica");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.invalid_service");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task RegisterAppointment_Should_Return_400_When_Tutor_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+        var (_, serviceIdB, tutorIdB, petIdB, vetIdB) = await SetupAdminWithReferencesAsync();
+
+        var response = await RegisterAppointmentAsync(serviceIdB, tutorIdA, petIdB, vetIdB, FutureDate(1), new TimeOnly(10, 0), "Tutor de outra clinica");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.invalid_tutor");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task RegisterAppointment_Should_Return_400_When_Pet_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+        var (_, serviceIdB, tutorIdB, petIdB, vetIdB) = await SetupAdminWithReferencesAsync();
+
+        var response = await RegisterAppointmentAsync(serviceIdB, tutorIdB, petIdA, vetIdB, FutureDate(1), new TimeOnly(10, 0), "Pet de outra clinica");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.invalid_pet");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task RegisterAppointment_Should_Return_400_When_Veterinarian_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+        var (_, serviceIdB, tutorIdB, petIdB, vetIdB) = await SetupAdminWithReferencesAsync();
+
+        var response = await RegisterAppointmentAsync(serviceIdB, tutorIdB, petIdB, vetIdA, FutureDate(1), new TimeOnly(10, 0), "Veterinario de outra clinica");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.invalid_veterinarian");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetAppointmentById_Should_Return_404_When_Appointment_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+
+        await RegisterAppointmentAsync(serviceIdA, tutorIdA, petIdA, vetIdA, FutureDate(1), new TimeOnly(10, 0), "Agendamento da clinica A");
+
+        Guid appointmentId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var apptDb = scope.ServiceProvider.GetRequiredService<AppointmentsDbContext>();
+            var savedAppt = await apptDb.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicA);
+            appointmentId = savedAppt!.Id;
+        }
+
+        var (emailB, passwordB, userIdB, clinicB) = await SetupAdminAsync();
+        await LoginAsync(emailB, passwordB);
+
+        var response = await _client.GetAsync($"/api/appointments/{appointmentId}");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.not_found");
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task UpdateAppointment_Should_Return_400_When_Appointment_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+
+        await RegisterAppointmentAsync(serviceIdA, tutorIdA, petIdA, vetIdA, FutureDate(1), new TimeOnly(10, 0), "Notas originais da clinica A");
+
+        Guid appointmentId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var apptDb = scope.ServiceProvider.GetRequiredService<AppointmentsDbContext>();
+            var savedAppt = await apptDb.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicA);
+            appointmentId = savedAppt!.Id;
+        }
+
+        var (emailB, passwordB, userIdB, clinicB) = await SetupAdminAsync();
+        await LoginAsync(emailB, passwordB);
+
+        var updateRequest = new
+        {
+            VeterinarianId = vetIdA,
+            ServiceId = serviceIdA,
+            Date = FutureDate(1),
+            Time = new TimeOnly(15, 0),
+            Notes = "Tentativa de alteracao pela clinica B"
+        };
+
+        var response = await _client.PutAsJsonAsync($"/api/appointments/{appointmentId}", updateRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.not_found");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var apptDb = scope.ServiceProvider.GetRequiredService<AppointmentsDbContext>();
+            var unchangedAppt = await apptDb.Appointments.FirstOrDefaultAsync(a => a.Id == appointmentId);
+
+            unchangedAppt.Should().NotBeNull();
+            unchangedAppt!.Notes.Should().Be("Notas originais da clinica A");
+            unchangedAppt.ScheduledTime.Should().Be(new TimeOnly(10, 0));
+        }
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task UpdateAppointmentStatus_Should_Return_400_When_Appointment_Belongs_To_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+
+        await RegisterAppointmentAsync(serviceIdA, tutorIdA, petIdA, vetIdA, FutureDate(1), new TimeOnly(10, 0), "Status da clinica A");
+
+        Guid appointmentId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var apptDb = scope.ServiceProvider.GetRequiredService<AppointmentsDbContext>();
+            var savedAppt = await apptDb.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicA);
+            appointmentId = savedAppt!.Id;
+        }
+
+        var (emailB, passwordB, userIdB, clinicB) = await SetupAdminAsync();
+        await LoginAsync(emailB, passwordB);
+
+        var statusRequest = new { NewStatus = 4 };
+        var response = await _client.PatchAsJsonAsync($"/api/appointments/{appointmentId}/status", statusRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("appointments.appt.not_found");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var apptDb = scope.ServiceProvider.GetRequiredService<AppointmentsDbContext>();
+            var unchangedAppt = await apptDb.Appointments.FirstOrDefaultAsync(a => a.Id == appointmentId);
+
+            unchangedAppt.Should().NotBeNull();
+            unchangedAppt!.Status.Should().Be(PetClinix.Modules.Appointments.Domain.Enums.AppointmentStatus.Scheduled);
+        }
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetAppointments_Should_Not_Return_Appointments_From_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+        var apptDate = FutureDate(1);
+
+        await RegisterAppointmentAsync(serviceIdA, tutorIdA, petIdA, vetIdA, apptDate, new TimeOnly(10, 0), "Agendamento da clinica A");
+
+        var (emailB, passwordB, userIdB, clinicB) = await SetupAdminAsync();
+        await LoginAsync(emailB, passwordB);
+
+        var response = await _client.GetAsync($"/api/appointments?startDate={apptDate:yyyy-MM-dd}&endDate={apptDate:yyyy-MM-dd}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<List<AppointmentItemResponse>>();
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
+
+        _client.DefaultRequestHeaders.Authorization = null;
+    }
+
+    [Fact]
+    public async Task GetAvailableSlots_Should_Not_Be_Affected_By_Appointments_From_Another_Clinic()
+    {
+        var (clinicA, serviceIdA, tutorIdA, petIdA, vetIdA) = await SetupAdminWithReferencesAsync();
+        var testDate = FutureDate(2);
+
+        await RegisterAppointmentAsync(serviceIdA, tutorIdA, petIdA, vetIdA, testDate, new TimeOnly(9, 0), "Ocupando slot na clinica A");
+
+        var (_, serviceIdB, tutorIdB, petIdB, vetIdB) = await SetupAdminWithReferencesAsync();
+
+        var query = $"/api/appointments/available-slots?vetId={vetIdA}&serviceId={serviceIdB}&date={testDate:yyyy-MM-dd}";
+        var response = await _client.GetAsync(query);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var slots = await response.Content.ReadFromJsonAsync<List<string>>();
+        slots.Should().NotBeNull();
+        slots!.Should().Contain("09:00");
 
         _client.DefaultRequestHeaders.Authorization = null;
     }
