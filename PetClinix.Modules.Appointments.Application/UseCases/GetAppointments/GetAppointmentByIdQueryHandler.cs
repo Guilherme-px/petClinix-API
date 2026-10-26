@@ -14,9 +14,9 @@ public sealed class GetAppointmentByIdQueryHandler : ICommandHandler<GetAppointm
 
     public async Task<Result<AppointmentResponse>> Handle(GetAppointmentByIdQuery query, CancellationToken cancellationToken)
     {
-        var appointment = await _appointmentRepository.GetByIdAsync(query.AppointmentId, cancellationToken);
+        var appointment = await _appointmentRepository.GetByIdAsync(query.ClinicId, query.AppointmentId, cancellationToken);
 
-        if (appointment == null || appointment.ClinicId != query.ClinicId)
+        if (appointment == null)
         {
             return Result<AppointmentResponse>.Failure("appointments.appt.not_found", "Agendamento não encontrado.");
         }

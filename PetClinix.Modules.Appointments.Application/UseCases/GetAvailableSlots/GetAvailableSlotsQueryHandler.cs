@@ -22,16 +22,16 @@ public sealed class GetAvailableSlotsQueryHandler : ICommandHandler<GetAvailable
 
     public async Task<Result<List<string>>> Handle(GetAvailableSlotsQuery query, CancellationToken cancellationToken)
     {
-        var durationMinutes = await _serviceCatalogService.GetDurationInMinutesAsync(query.ServiceId, cancellationToken);
+        var durationMinutes = await _serviceCatalogService.GetDurationInMinutesAsync(query.ClinicId, query.ServiceId, cancellationToken);
         if (durationMinutes <= 0)
             return Result<List<string>>.Failure("appointments.slots.invalid_duration", "Duração do serviço inválida.");
 
         var (startTime, endTime) = _clinicScheduleService.GetWorkingHours();
 
-        var appointments = await _appointmentRepository.GetByVeterinarianAndDateAsync(query.VeterinarianId, query.Date, cancellationToken);
+        var appointments = await _appointmentRepository.GetByVeterinarianAndDateAsync(query.ClinicId, query.VeterinarianId, query.Date, cancellationToken);
 
         var serviceIds = appointments.Select(a => a.ServiceId).Distinct().ToList();
-        var durations = await _serviceCatalogService.GetDurationsInMinutesAsync(serviceIds, cancellationToken);
+        var durations = await _serviceCatalogService.GetDurationsInMinutesAsync(query.ClinicId, serviceIds, cancellationToken);
 
         var busyRanges = appointments
             .Select(a =>

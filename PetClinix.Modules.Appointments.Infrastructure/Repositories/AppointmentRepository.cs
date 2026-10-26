@@ -20,15 +20,16 @@ public class AppointmentRepository : IAppointmentRepository
         await _context.Appointments.AddAsync(appointment, cancellationToken);
     }
 
-    public async Task<Appointment?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Appointment?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return await _context.Appointments.FirstOrDefaultAsync(a => a.ClinicId == clinicId && a.Id == id, cancellationToken);
     }
 
-    public async Task<List<Appointment>> GetByVeterinarianAndDateAsync(Guid veterinarianId, DateOnly date, CancellationToken cancellationToken = default)
+    public async Task<List<Appointment>> GetByVeterinarianAndDateAsync(Guid clinicId, Guid veterinarianId, DateOnly date, CancellationToken cancellationToken = default)
     {
         return await _context.Appointments
-            .Where(a => a.VeterinarianId == veterinarianId &&
+            .Where(a => a.ClinicId == clinicId &&
+                        a.VeterinarianId == veterinarianId &&
                         a.ScheduledDate == date &&
                         a.Status != AppointmentStatus.Canceled)
             .OrderBy(a => a.ScheduledTime)

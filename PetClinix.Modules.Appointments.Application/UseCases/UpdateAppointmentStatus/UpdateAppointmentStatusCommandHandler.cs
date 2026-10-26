@@ -19,9 +19,9 @@ public sealed class UpdateAppointmentStatusCommandHandler : ICommandHandler<Upda
 
     public async Task<Result> Handle(UpdateAppointmentStatusCommand command, CancellationToken cancellationToken)
     {
-        var appointment = await _appointmentRepository.GetByIdAsync(command.AppointmentId, cancellationToken);
+        var appointment = await _appointmentRepository.GetByIdAsync(command.ClinicId, command.AppointmentId, cancellationToken);
 
-        if (appointment == null || appointment.ClinicId != command.ClinicId)
+        if (appointment == null)
         {
             return Result.Failure("appointments.appt.not_found", "Agendamento não encontrado.");
         }

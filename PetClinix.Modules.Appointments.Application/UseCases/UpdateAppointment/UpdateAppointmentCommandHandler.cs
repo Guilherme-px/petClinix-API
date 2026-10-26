@@ -11,42 +11,48 @@ public sealed class UpdateAppointmentCommandHandler : ICommandHandler<UpdateAppo
     private readonly IAppointmentRepository _appointmentRepository;
     private readonly IServiceCatalogService _serviceCatalogService;
     private readonly IClinicScheduleService _clinicScheduleService;
+    private readonly IAppointmentReferenceChecker _referenceChecker;
     private readonly IAppointmentsUnitOfWork _unitOfWork;
 
     public UpdateAppointmentCommandHandler(
         IAppointmentRepository appointmentRepository,
         IServiceCatalogService serviceCatalogService,
         IClinicScheduleService clinicScheduleService,
+        IAppointmentReferenceChecker referenceChecker,
         IAppointmentsUnitOfWork unitOfWork)
     {
         _appointmentRepository = appointmentRepository;
         _serviceCatalogService = serviceCatalogService;
         _clinicScheduleService = clinicScheduleService;
+        _referenceChecker = referenceChecker;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<Result> Handle(UpdateAppointmentCommand command, CancellationToken cancellationToken)
     {
-        var appointment = await _appointmentRepository.GetByIdAsync(command.AppointmentId, cancellationToken);
+        var appointment = await _appointmentRepository.GetByIdAsync(command.ClinicId, command.AppointmentId, cancellationToken);
 
-        if (appointment == null || appointment.ClinicId != command.ClinicId)
+        if (appointment == null)
         {
             return Result.Failure("appointments.appt.not_found", "Agendamento não encontrado.");
         }
 
-        var selectedDuration = await _serviceCatalogService.GetDurationInMinutesAsync(command.ServiceId, cancellationToken);
+        var selectedDuration = await _serviceCatalogService.GetDurationInMinutesAsync(command.ClinicId, command.ServiceId, cancellationToken);
         if (selectedDuration <= 0)
             return Result.Failure("appointments.appt.invalid_service", "Serviço inválido ou sem duração definida.");
+
+        if (!await _referenceChecker.VeterinarianExistsInClinicAsync(command.ClinicId, command.VeterinarianId, cancellationToken))
+            return Result.Failure("appointments.appt.invalid_veterinarian", "Veterinário não encontrado nesta clínica.");
 
         var (startTime, endTime) = _clinicScheduleService.GetWorkingHours();
 
         if (command.Time < startTime || command.Time.AddMinutes(selectedDuration) > endTime)
             return Result.Failure("appointments.appt.outside_working_hours", $"O agendamento deve ocorrer entre {startTime:hh\\:mm} e {endTime:hh\\:mm}.");
 
-        var existingAppointments = await _appointmentRepository.GetByVeterinarianAndDateAsync(command.VeterinarianId, command.Date, cancellationToken);
+        var existingAppointments = await _appointmentRepository.GetByVeterinarianAndDateAsync(command.ClinicId, command.VeterinarianId, command.Date, cancellationToken);
 
         var serviceIds = existingAppointments.Select(a => a.ServiceId).Distinct().ToList();
-        var durations = await _serviceCatalogService.GetDurationsInMinutesAsync(serviceIds, cancellationToken);
+        var durations = await _serviceCatalogService.GetDurationsInMinutesAsync(command.ClinicId, serviceIds, cancellationToken);
 
         var newStart = command.Time;
         var newEnd = command.Time.AddMinutes(selectedDuration);
