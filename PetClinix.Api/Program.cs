@@ -181,7 +181,8 @@ builder.Services.Configure<ResendClientOptions>(opt =>
         ?? throw new InvalidOperationException("Resend ApiKey não configurada.");
 });
 builder.Services.AddHttpClient<ResendClient>();
-builder.Services.AddScoped<IEmailService, ResendEmailService>();
+builder.Services.AddScoped<ResendEmailService>();
+builder.Services.AddScoped<IEmailService, SmtpFallbackEmailService>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey não configurada.");
