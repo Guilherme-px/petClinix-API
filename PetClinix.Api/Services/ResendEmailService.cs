@@ -10,6 +10,7 @@ public class ResendEmailService : IEmailService
     private readonly ResendClient _client;
     private readonly string _fromEmail = "PetClinix <onboarding@resend.dev>";
     private readonly string? _devOverrideEmail;
+    private readonly string? _frontendBaseUrl;
     private readonly ILogger<ResendEmailService> _logger;
 
     public ResendEmailService(ResendClient client, IConfiguration configuration, ILogger<ResendEmailService> logger)
@@ -17,6 +18,7 @@ public class ResendEmailService : IEmailService
         _client = client;
         _logger = logger;
         _devOverrideEmail = configuration["Resend:DevOverrideEmail"];
+        _frontendBaseUrl = configuration["App:FrontendBaseUrl"];
     }
 
     public async Task<string?> SendWelcomeEmailAsync(string toEmail, string userName, string passwordResetToken, CancellationToken cancellationToken = default)
@@ -27,7 +29,7 @@ public class ResendEmailService : IEmailService
 
         if (isDevOverrideTarget)
         {
-            var resetLink = $"http://localhost:5173/define-senha?token={passwordResetToken}";
+            var resetLink = $"{GetFrontendBaseUrl()}/reset-password?token={passwordResetToken}";
 
             var htmlContent = $@"
             <h1>Bem-vindo ao PetClinix, {userName}!</h1>
@@ -59,7 +61,7 @@ public class ResendEmailService : IEmailService
 
                 if (response.Content != Guid.Empty)
                 {
-                    _logger.LogInformation("✅ E-mail de boas-vindas enviado com sucesso via Resend. ID: {Id}", response.Content);
+                    _logger.LogInformation("E-mail de boas-vindas enviado com sucesso via Resend. ID: {Id}", response.Content);
                 }
                 else
                 {
@@ -74,7 +76,16 @@ public class ResendEmailService : IEmailService
             return null;
         }
 
-        _logger.LogInformation("📧 DEMO MODE: E-mail não enviado para {Email}. Token retornado na resposta da API.", toEmail);
+        _logger.LogInformation("DEMO MODE: E-mail não enviado para {Email}. Token retornado na resposta da API.", toEmail);
         return passwordResetToken;
+    }
+
+    private string GetFrontendBaseUrl()
+    {
+        var baseUrl = string.IsNullOrWhiteSpace(_frontendBaseUrl)
+            ? "http://localhost:5173"
+            : _frontendBaseUrl;
+
+        return baseUrl.TrimEnd('/');
     }
 }
