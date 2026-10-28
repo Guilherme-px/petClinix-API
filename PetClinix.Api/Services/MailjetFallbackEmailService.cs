@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -11,6 +12,11 @@ namespace PetClinix.Api.Services;
 public class MailjetFallbackEmailService : IEmailService
 {
     private const string MailjetEndpoint = "https://api.mailjet.com/v3.1/send";
+
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     private readonly ResendEmailService _inner;
     private readonly HttpClient _httpClient;
@@ -53,7 +59,7 @@ public class MailjetFallbackEmailService : IEmailService
             return await _inner.SendWelcomeEmailAsync(toEmail, userName, passwordResetToken, cancellationToken);
         }
 
-        var resetLink = $"{GetFrontendBaseUrl()}/define-senha?token={passwordResetToken}";
+        var resetLink = $"{GetFrontendBaseUrl()}/reset-password?token={passwordResetToken}";
 
         try
         {
@@ -68,7 +74,10 @@ public class MailjetFallbackEmailService : IEmailService
 
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, MailjetEndpoint)
             {
-                Content = JsonContent.Create(request)
+                Content = new StringContent(
+        JsonSerializer.Serialize(request, SerializerOptions),
+        Encoding.UTF8,
+        "application/json")
             };
 
             var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
@@ -80,7 +89,13 @@ public class MailjetFallbackEmailService : IEmailService
                 return null;
             }
 
-            _logger.LogInformation("E-mail de boas-vindas enviado via Mailjet para {Email}.", toEmail);
+            if (TryGetRejectedMessageStatus(body, out var rejectedStatus))
+            {
+                _logger.LogError("Mailjet não aceitou a mensagem para {Email} (Status: {Status}). Resposta: {Body}", toEmail, rejectedStatus, body);
+                return null;
+            }
+
+            _logger.LogInformation("E-mail de boas-vindas enviado via Mailjet para {Email}. Resposta: {Body}", toEmail, body);
         }
         catch (Exception ex)
         {
@@ -88,6 +103,43 @@ public class MailjetFallbackEmailService : IEmailService
         }
 
         return null;
+    }
+
+    private static bool TryGetRejectedMessageStatus(string responseBody, out string? status)
+    {
+        status = null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+
+            if (!document.RootElement.TryGetProperty("Messages", out var messages) ||
+                messages.ValueKind != JsonValueKind.Array)
+            {
+                return true;
+            }
+
+            foreach (var message in messages.EnumerateArray())
+            {
+                if (message.TryGetProperty("Status", out var statusProperty) &&
+                    statusProperty.ValueKind == JsonValueKind.String)
+                {
+                    var messageStatus = statusProperty.GetString();
+
+                    if (!string.Equals(messageStatus, "success", StringComparison.OrdinalIgnoreCase))
+                    {
+                        status = messageStatus;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
     }
 
     private bool IsDeliverableByResend(string toEmail) =>
