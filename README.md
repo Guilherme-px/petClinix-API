@@ -3,7 +3,7 @@
 # PetClinix
 
 **🔗 Live Demo:** [https://petclinix.onrender.com/swagger/index.html](https://petclinix.onrender.com/swagger/index.html)
-*(Note: The free tier on Render may take ~50 seconds to wake up if inactive)*
+_(Note: The free tier on Render may take ~50 seconds to wake up if inactive)_
 
 PetClinix is a multi-tenant SaaS MVP for veterinary clinics, designed and implemented as a public portfolio project to demonstrate senior-level software engineering practices, product thinking, and architectural decision-making.
 
@@ -144,32 +144,32 @@ tests/
 Before you begin, ensure you have the following installed on your machine:
 
 1. **.NET 10 SDK**
-   - Required to build and run the application.
-   - Download: [https://dotnet.microsoft.com/download/dotnet/10.0](https://dotnet.microsoft.com/download/dotnet/10.0)
+    - Required to build and run the application.
+    - Download: [https://dotnet.microsoft.com/download/dotnet/10.0](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 2. **Docker & Docker Compose**
-   - Used to run the PostgreSQL database locally for development.
-   - The project includes a `docker-compose.yml` file. Create a `.env` file in the root (copy from `.env.example`) with your local DB credentials, then run:
-     ```bash
-     docker-compose up -d
-     ```
-   - **Strictly required to run the Integration Tests.** The integration tests use `Testcontainers` to spin up a real, ephemeral PostgreSQL database inside a Docker container automatically.
-   - Download: [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+    - Used to run the PostgreSQL database locally for development.
+    - The project includes a `docker-compose.yml` file. Create a `.env` file in the root (copy from `.env.example`) with your local DB credentials, then run:
+        ```bash
+        docker-compose up -d
+        ```
+    - **Strictly required to run the Integration Tests.** The integration tests use `Testcontainers` to spin up a real, ephemeral PostgreSQL database inside a Docker container automatically.
+    - Download: [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
 
 3. **Entity Framework Core Tools**
-   - Required to create and apply database migrations manually.
-   - Install globally by running:
-     ```bash
-     dotnet tool install --global dotnet-ef
-     ```
+    - Required to create and apply database migrations manually.
+    - Install globally by running:
+        ```bash
+        dotnet tool install --global dotnet-ef
+        ```
 
 4. **Stripe CLI**
-   - Required to test the subscription payment flow and webhooks locally.
-   - Installation guide: [https://stripe.com/docs/stripe-cli](https://stripe.com/docs/stripe-cli)
+    - Required to test the subscription payment flow and webhooks locally.
+    - Installation guide: [https://stripe.com/docs/stripe-cli](https://stripe.com/docs/stripe-cli)
 
 5. **Resend Account**
-   - Required to send real welcome and password reset emails.
-   - Sign up for free at [https://resend.com](https://resend.com) and get your API key.
+    - Required to send real welcome and password reset emails.
+    - Sign up for free at [https://resend.com](https://resend.com) and get your API key.
 
 ---
 
@@ -178,63 +178,81 @@ Before you begin, ensure you have the following installed on your machine:
 Follow these steps to set up and run the project locally.
 
 ### 1. Clone the repository
+
 ```bash
 git clone https://github.com/your-username/PetClinix.git
 cd PetClinix
 ```
 
 ### 2. Configure the Database Connection
+
 The application uses a layered configuration approach. The base template is in `appsettings.json`, but your local credentials should be placed in `appsettings.Development.json` (which is ignored by Git).
 
 Create the file `PetClinix.Api/appsettings.Development.json` and add your connection string. Ensure the credentials match your `.env` file used by Docker Compose:
 
 ```json
 {
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=petclinix_db;Username=petclinix_dev;Password=YourPassowrd@123"
-  },
-  "Stripe": {
-    "SecretKey": "sk_test_YOUR_STRIPE_SECRET_KEY",
-    "WebhookSecret": "whsec_YOUR_WEBHOOK_SECRET"
-  },
-  "JwtSettings": {
-    "SecretKey": "SuperSecretKeyChangeThisInProductionAtLeast32CharactersLong",
-    "Issuer": "PetClinix",
-    "Audience": "PetClinixUsers",
-    "ExpiryMinutes": 60
-  },
-   "Resend": {
-    "ApiKey": "re_YOUR_RESEND_API_KEY",
-    "DevOverrideEmail": "YOUR_RESEND_EMAI"
-  }
+    "ConnectionStrings": {
+        "DefaultConnection": "Host=localhost;Port=5432;Database=petclinix_db;Username=petclinix_dev;Password=YourPassowrd@123"
+    },
+    "Stripe": {
+        "SecretKey": "sk_test_YOUR_STRIPE_SECRET_KEY",
+        "WebhookSecret": "whsec_YOUR_WEBHOOK_SECRET"
+    },
+    "JwtSettings": {
+        "SecretKey": "SuperSecretKeyChangeThisInProductionAtLeast32CharactersLong",
+        "Issuer": "PetClinix",
+        "Audience": "PetClinixUsers",
+        "ExpiryMinutes": 60
+    },
+    "Resend": {
+        "ApiKey": "re_YOUR_RESEND_API_KEY",
+        "DevOverrideEmail": "YOUR_RESEND_EMAI"
+    },
+    "Cors": {
+        "AllowedOrigins": ["http://localhost:3000", "http://localhost:5173"]
+    },
+    "App": {
+        "FrontendBaseUrl": "http://localhost:5173"
+    },
+    "Mailjet": {
+        "ApiKey": "YOUR_API_KEY",
+        "SecretKey": "YOUR_SECRET_KEY",
+        "SenderEmail": "seu.remetente@gmail.com",
+        "SenderName": "PetClinix"
+    }
 }
 ```
 
 ### 3. Run the Application
+
 ```bash
 dotnet run --project PetClinix.Api
 ```
-*(Note: The API is configured to automatically apply database migrations on startup, creating all necessary tables. Manual migration commands are not required for local development).*
+
+_(Note: The API is configured to automatically apply database migrations on startup, creating all necessary tables. Manual migration commands are not required for local development)._
 
 Once running, open your browser and navigate to the Swagger UI to test the API endpoints:
+
 - **Swagger UI:** `http://localhost:<port>/swagger` (check your terminal output for the exact port, usually `5180` or `5000`).
 
 ### 4. Setup Stripe Webhooks (Local Development)
+
 To test the payment flow locally, you need to forward Stripe webhook events to your local API.
 
 1. Log in to your Stripe account via CLI:
-   ```bash
-   stripe login
-   ```
+    ```bash
+    stripe login
+    ```
 2. Start listening for webhooks and forward them to your local API endpoint (adjust the port if necessary):
-   ```bash
-   stripe listen --forward-to http://localhost:5180/api/webhooks/stripe
-   ```
+    ```bash
+    stripe listen --forward-to http://localhost:5180/api/webhooks/stripe
+    ```
 3. The CLI will output a webhook signing secret (e.g., `whsec_...`). Copy this secret and paste it into your `appsettings.Development.json` under `Stripe:WebhookSecret`.
 4. To simulate a successful payment event in another terminal, run:
-   ```bash
-   stripe trigger checkout.session.completed
-   ```
+    ```bash
+    stripe trigger checkout.session.completed
+    ```
 
 ---
 
@@ -243,19 +261,25 @@ To test the payment flow locally, you need to forward Stripe webhook events to y
 The project contains a comprehensive test suite divided into Unit Tests and Integration Tests.
 
 ### Run All Tests
+
 To run the entire test suite. **Note: Docker must be running** for the integration tests to execute successfully:
+
 ```bash
 dotnet test
 ```
 
 ### Run Unit Tests Only
+
 Unit tests are fast and do not require external dependencies like databases or Docker.
+
 ```bash
 dotnet test tests/PetClinix.UnitTests
 ```
 
 ### Run Integration Tests Only
+
 Integration tests validate the API from the HTTP request down to the PostgreSQL database. **They require Docker to be running**.
+
 ```bash
 dotnet test tests/PetClinix.IntegrationTests
 ```

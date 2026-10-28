@@ -3,7 +3,7 @@
 # PetClinix
 
 **🔗 Demo ao Vivo:** [https://petclinix.onrender.com/swagger/index.html](https://petclinix.onrender.com/swagger/index.html)
-*(Nota: O plano gratuito do Render pode levar ~50 segundos para "acordar" se estiver inativo)*
+_(Nota: O plano gratuito do Render pode levar ~50 segundos para "acordar" se estiver inativo)_
 
 PetClinix é um MVP de SaaS multi-tenant para clínicas veterinárias, projetado e implementado como um projeto de portfólio público para demonstrar práticas de engenharia de software de nível sênior, visão de produto e tomada de decisões arquiteturais.
 
@@ -144,32 +144,32 @@ tests/
 Antes de começar, garanta que você tenha o seguinte instalado em sua máquina:
 
 1. **.NET 10 SDK**
-   - Necessário para compilar e rodar a aplicação.
-   - Download: [https://dotnet.microsoft.com/download/dotnet/10.0](https://dotnet.microsoft.com/download/dotnet/10.0)
+    - Necessário para compilar e rodar a aplicação.
+    - Download: [https://dotnet.microsoft.com/download/dotnet/10.0](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 2. **Docker & Docker Compose**
-   - Usado para rodar o banco de dados PostgreSQL localmente para desenvolvimento.
-   - O projeto inclui um arquivo `docker-compose.yml`. Crie um arquivo `.env` na raiz (copie do `.env.example`) com suas credenciais locais do banco de dados, e então rode:
-     ```bash
-     docker-compose up -d
-     ```
-   - **Estritamente necessário para rodar os Testes de Integração.** Os testes de integração usam o `Testcontainers` para subir um banco de dados PostgreSQL real e efêmero dentro de um container Docker automaticamente.
-   - Download: [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+    - Usado para rodar o banco de dados PostgreSQL localmente para desenvolvimento.
+    - O projeto inclui um arquivo `docker-compose.yml`. Crie um arquivo `.env` na raiz (copie do `.env.example`) com suas credenciais locais do banco de dados, e então rode:
+        ```bash
+        docker-compose up -d
+        ```
+    - **Estritamente necessário para rodar os Testes de Integração.** Os testes de integração usam o `Testcontainers` para subir um banco de dados PostgreSQL real e efêmero dentro de um container Docker automaticamente.
+    - Download: [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
 
 3. **Entity Framework Core Tools**
-   - Necessário para criar e aplicar migrações de banco de dados manualmente.
-   - Instale globalmente rodando:
-     ```bash
-     dotnet tool install --global dotnet-ef
-     ```
+    - Necessário para criar e aplicar migrações de banco de dados manualmente.
+    - Instale globalmente rodando:
+        ```bash
+        dotnet tool install --global dotnet-ef
+        ```
 
 4. **Stripe CLI**
-   - Necessário para testar o fluxo de pagamento de assinaturas e os webhooks localmente.
-   - Guia de instalação: [https://stripe.com/docs/stripe-cli](https://stripe.com/docs/stripe-cli)
+    - Necessário para testar o fluxo de pagamento de assinaturas e os webhooks localmente.
+    - Guia de instalação: [https://stripe.com/docs/stripe-cli](https://stripe.com/docs/stripe-cli)
 
 5. **Conta no Resend**
-   - Necessário para enviar e-mails reais de boas-vindas e redefinição de senha.
-   - Crie uma conta gratuita em [https://resend.com](https://resend.com) e obtenha sua chave de API.
+    - Necessário para enviar e-mails reais de boas-vindas e redefinição de senha.
+    - Crie uma conta gratuita em [https://resend.com](https://resend.com) e obtenha sua chave de API.
 
 ---
 
@@ -178,63 +178,81 @@ Antes de começar, garanta que você tenha o seguinte instalado em sua máquina:
 Siga estes passos para configurar e rodar o projeto localmente.
 
 ### 1. Clone o repositório
+
 ```bash
 git clone https://github.com/seu-usuario/PetClinix.git
 cd PetClinix
 ```
 
 ### 2. Configure a Conexão com o Banco de Dados
+
 A aplicação usa uma abordagem de configuração em camadas. O template base está em `appsettings.json`, mas suas credenciais locais devem ser colocadas em `appsettings.Development.json` (que é ignorado pelo Git).
 
 Crie o arquivo `PetClinix.Api/appsettings.Development.json` e adicione sua string de conexão. Certifique-se de que as credenciais correspondam ao seu arquivo `.env` usado pelo Docker Compose:
 
 ```json
 {
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=petclinix_db;Username=petclinix_dev;Password=SenhaSeguraDev@123"
-  },
-  "Stripe": {
-    "SecretKey": "sk_test_SUA_CHAVE_SECRETA_DO_STRIPE",
-    "WebhookSecret": "whsec_SUA_CHAVE_DE_WEBHOOK"
-  },
-  "JwtSettings": {
-    "SecretKey": "SuperSecretKeyChangeThisInProductionAtLeast32CharactersLong",
-    "Issuer": "PetClinix",
-    "Audience": "PetClinixUsers",
-    "ExpiryMinutes": 60
-  },
-   "Resend": {
-    "ApiKey": "re_SUA_CHAVE_DA_API_DO_RESEND",
-    "DevOverrideEmail": "YOUR_RESEND_EMAI"
-  }
+    "ConnectionStrings": {
+        "DefaultConnection": "Host=localhost;Port=5432;Database=petclinix_db;Username=petclinix_dev;Password=SenhaSeguraDev@123"
+    },
+    "Stripe": {
+        "SecretKey": "sk_test_SUA_CHAVE_SECRETA_DO_STRIPE",
+        "WebhookSecret": "whsec_SUA_CHAVE_DE_WEBHOOK"
+    },
+    "JwtSettings": {
+        "SecretKey": "SuperSecretKeyChangeThisInProductionAtLeast32CharactersLong",
+        "Issuer": "PetClinix",
+        "Audience": "PetClinixUsers",
+        "ExpiryMinutes": 60
+    },
+    "Resend": {
+        "ApiKey": "re_SUA_CHAVE_DA_API_DO_RESEND",
+        "DevOverrideEmail": "YOUR_RESEND_EMAI"
+    },
+    "Cors": {
+        "AllowedOrigins": ["http://localhost:3000", "http://localhost:5173"]
+    },
+    "App": {
+        "FrontendBaseUrl": "http://localhost:5173"
+    },
+    "Mailjet": {
+        "ApiKey": "SUA_API_KEY",
+        "SecretKey": "SUA_SECRET_KEY",
+        "SenderEmail": "seu.remetente@gmail.com",
+        "SenderName": "PetClinix"
+    }
 }
 ```
 
 ### 3. Rode a Aplicação
+
 ```bash
 dotnet run --project PetClinix.Api
 ```
-*(Nota: A API está configurada para aplicar as migrações do banco de dados automaticamente na inicialização, criando todas as tabelas necessárias. Comandos manuais de migração não são necessários para o desenvolvimento local).*
+
+_(Nota: A API está configurada para aplicar as migrações do banco de dados automaticamente na inicialização, criando todas as tabelas necessárias. Comandos manuais de migração não são necessários para o desenvolvimento local)._
 
 Uma vez em execução, abra seu navegador e navegue até o Swagger UI para testar os endpoints da API:
+
 - **Swagger UI:** `http://localhost:<porta>/swagger` (verifique a saída do seu terminal para a porta exata, geralmente `5180` ou `5000`).
 
 ### 4. Configure o Stripe Webhooks (Desenvolvimento Local)
+
 Para testar o fluxo de pagamento localmente, você precisa encaminhar os eventos de webhook do Stripe para sua API local.
 
 1. Faça login na sua conta do Stripe via CLI:
-   ```bash
-   stripe login
-   ```
+    ```bash
+    stripe login
+    ```
 2. Comece a escutar webhooks e encaminhe-os para o seu endpoint de API local (ajuste a porta, se necessário):
-   ```bash
-   stripe listen --forward-to http://localhost:5180/api/webhooks/stripe
-   ```
+    ```bash
+    stripe listen --forward-to http://localhost:5180/api/webhooks/stripe
+    ```
 3. A CLI exibirá um segredo de assinatura de webhook (por exemplo, `whsec_...`). Copie esse segredo e cole-o no seu arquivo `appsettings.Development.json`, em `Stripe:WebhookSecret`.
 4. Para simular um evento de pagamento bem-sucedido em outro terminal, execute:
-   ```bash
-   stripe trigger checkout.session.completed
-   ```
+    ```bash
+    stripe trigger checkout.session.completed
+    ```
 
 ---
 
@@ -243,19 +261,25 @@ Para testar o fluxo de pagamento localmente, você precisa encaminhar os eventos
 O projeto contém uma suíte abrangente de testes dividida em Testes Unitários e Testes de Integração.
 
 ### Rodar Todos os Testes
+
 Para rodar toda a suíte de testes. **Nota: O Docker deve estar em execução** para que os testes de integração sejam executados com sucesso:
+
 ```bash
 dotnet test
 ```
 
 ### Rodar Apenas Testes Unitários
+
 Testes unitários são rápidos e não requerem dependências externas como bancos de dados ou Docker.
+
 ```bash
 dotnet test tests/PetClinix.UnitTests
 ```
 
 ### Rodar Apenas Testes de Integração
+
 Testes de integração validam a API desde a requisição HTTP até o banco de dados PostgreSQL. **Eles exigem que o Docker esteja em execução**.
+
 ```bash
 dotnet test tests/PetClinix.IntegrationTests
 ```
