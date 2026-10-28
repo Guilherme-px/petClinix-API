@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using PetClinix.Api.Filters;
 using PetClinix.Api.Middlewares;
 using PetClinix.Api.Services;
 using PetClinix.BuildingBlocks.Application;
@@ -75,7 +76,6 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-
     options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.Http,
@@ -84,10 +84,7 @@ builder.Services.AddSwaggerGen(options =>
         Description = "JWT Authorization header using the Bearer scheme."
     });
 
-    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-    {
-        [new OpenApiSecuritySchemeReference("bearer", document)] = []
-    });
+    options.OperationFilter<BearerSecurityOperationFilter>();
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -182,7 +179,7 @@ builder.Services.Configure<ResendClientOptions>(opt =>
 });
 builder.Services.AddHttpClient<ResendClient>();
 builder.Services.AddScoped<ResendEmailService>();
-builder.Services.AddScoped<IEmailService, SmtpFallbackEmailService>();
+builder.Services.AddScoped<IEmailService, MailjetFallbackEmailService>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey não configurada.");
