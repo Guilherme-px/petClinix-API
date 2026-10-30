@@ -29,6 +29,16 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
             return Result<RefreshTokenResponse>.Failure("auth.invalid_refresh_token", "Refresh token inválido ou expirado.");
         }
 
+        if (!user.IsActive)
+        {
+            user.RevokeRefreshToken();
+
+            await _userRepository.UpdateAsync(user, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return Result<RefreshTokenResponse>.Failure("auth.inactive_account", "Esta conta está desativada.");
+        }
+
         var newToken = _jwtTokenGenerator.GenerateToken(user);
         var newRefreshToken = user.GenerateRefreshToken();
 

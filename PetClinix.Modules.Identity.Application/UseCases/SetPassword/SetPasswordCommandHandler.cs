@@ -27,6 +27,11 @@ public sealed class SetPasswordCommandHandler : ICommandHandler<SetPasswordComma
             return Result.Failure("identity.user.invalid_token", "Token de redefinição inválido.");
         }
 
+        if (!user.IsActive)
+        {
+            return Result.Failure("auth.inactive_account", "Esta conta está desativada.");
+        }
+
         try
         {
             var passwordHash = _passwordHasher.Hash(command.Password);
