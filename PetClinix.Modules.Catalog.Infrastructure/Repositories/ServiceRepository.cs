@@ -22,7 +22,7 @@ public class ServiceRepository : IServiceRepository
 
     public async Task<bool> ExistsByNameAsync(Guid clinicId, string name, CancellationToken cancellationToken = default)
     {
-        return await _context.Services.AnyAsync(s => s.ClinicId == clinicId && s.Name == name, cancellationToken);
+        return await _context.Services.AnyAsync(s => s.ClinicId == clinicId && s.Name == name && s.IsActive, cancellationToken);
     }
 
     public async Task<(IEnumerable<Service> Services, int TotalCount)> GetAllByClinicIdAsync(
@@ -53,7 +53,7 @@ public class ServiceRepository : IServiceRepository
     public async Task<Service?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Services
-            .FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.Id == id && s.IsActive, cancellationToken);
     }
 
     public async Task UpdateAsync(Service service, CancellationToken cancellationToken = default)
