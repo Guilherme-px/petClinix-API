@@ -54,7 +54,7 @@ public class TutorRepository : ITutorRepository
 
     public async Task<Tutor?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Tutors.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Id == id, cancellationToken);
+        return await _context.Tutors.FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.Id == id && t.IsActive, cancellationToken);
     }
 
     public async Task UpdateAsync(Tutor tutor, CancellationToken cancellationToken = default)

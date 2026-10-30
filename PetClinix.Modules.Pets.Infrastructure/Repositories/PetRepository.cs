@@ -27,7 +27,7 @@ public class PetRepository : IPetRepository
 
     public async Task<Pet?> GetByIdAsync(Guid clinicId, Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Pets.FirstOrDefaultAsync(p => p.ClinicId == clinicId && p.Id == id, cancellationToken);
+        return await _context.Pets.FirstOrDefaultAsync(p => p.ClinicId == clinicId && p.Id == id && p.IsActive, cancellationToken);
     }
 
     public async Task<(IEnumerable<Pet> Pets, int TotalCount)> GetAllByTutorIdAsync(
@@ -67,6 +67,6 @@ public class PetRepository : IPetRepository
 
     public async Task<bool> ExistsActiveByTutorIdAsync(Guid clinicId, Guid tutorId, CancellationToken cancellationToken = default)
     {
-        return await _context.Pets.AnyAsync(p => p.ClinicId == clinicId && p.TutorId == tutorId && p.IsActive, cancellationToken);
+        return await _context.Pets.AnyAsync(p => p.ClinicId == clinicId && p.TutorId == tutorId, cancellationToken);
     }
 }
