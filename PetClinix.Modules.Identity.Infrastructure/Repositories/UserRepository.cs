@@ -49,19 +49,19 @@ public class UserRepository : IUserRepository
 
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        return await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.IsActive, cancellationToken);
     }
 
     public async Task<int> CountByClinicIdAsync(Guid clinicId, CancellationToken cancellationToken = default)
     {
-        return await _context.Users.CountAsync(u => u.ClinicId == clinicId, cancellationToken);
+        return await _context.Users.CountAsync(u => u.ClinicId == clinicId && u.IsActive, cancellationToken);
     }
 
     public async Task<(IEnumerable<User> Users, int TotalCount)> GetAllByClinicIdAsync(
         Guid clinicId, int pageNumber, int pageSize, string search = "", CancellationToken cancellationToken = default)
     {
         var query = _context.Users
-            .Where(u => u.ClinicId == clinicId && u.Role != UserRole.Admin);
+            .Where(u => u.ClinicId == clinicId && u.Role != UserRole.Admin && u.IsActive);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
