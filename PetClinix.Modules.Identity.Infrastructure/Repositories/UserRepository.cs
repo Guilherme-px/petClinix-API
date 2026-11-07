@@ -89,4 +89,11 @@ public class UserRepository : IUserRepository
             .OrderBy(u => u.Name)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<int> CountActiveVeterinariansAsync(Guid clinicId, CancellationToken cancellationToken)
+    {
+        return await _context.Users
+            .AsNoTracking()
+            .CountAsync(u => u.ClinicId == clinicId && u.Role == UserRole.Veterinarian && u.IsActive, cancellationToken);
+    }
 }

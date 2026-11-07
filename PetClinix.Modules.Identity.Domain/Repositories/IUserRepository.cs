@@ -21,4 +21,5 @@ public interface IUserRepository
         int pageSize,
         string search = "",
         CancellationToken cancellationToken = default);
+    Task<int> CountActiveVeterinariansAsync(Guid clinicId, CancellationToken cancellationToken);
 }
