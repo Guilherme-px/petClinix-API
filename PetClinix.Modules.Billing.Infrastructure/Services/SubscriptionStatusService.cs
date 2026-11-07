@@ -34,9 +34,9 @@ public class SubscriptionStatusService : ISubscriptionStatusService
 
         return subscription.PlanTier switch
         {
-            PlanTier.Basic => 4,
-            PlanTier.Intermediate => 8,
-            PlanTier.Enterprise => int.MaxValue,
+            PlanTier.Essential => 2,
+            PlanTier.Professional => 5,
+            PlanTier.Premium => int.MaxValue,
             _ => 0
         };
     }
