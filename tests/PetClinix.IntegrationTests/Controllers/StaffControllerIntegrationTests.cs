@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PetClinix.Modules.Billing.Domain.Entities;
 using PetClinix.Modules.Billing.Domain.Enums;
 using PetClinix.Modules.Billing.Infrastructure.Persistence;
+using PetClinix.Modules.Identity.Domain.Entities;
 using PetClinix.Modules.Identity.Domain.Enums;
 using PetClinix.Modules.Identity.Infrastructure.Persistence;
 using Xunit;
@@ -17,13 +18,16 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
     private readonly HttpClient _client;
     private readonly CustomWebApplicationFactory _factory;
 
+    private const int ESSENTIAL_STAFF_LIMIT = 2;
+    private const int PROFESSIONAL_STAFF_LIMIT = 5;
+
     public StaffControllerIntegrationTests(CustomWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
     }
 
-    private async Task<(string Email, string Password)> SetupAdminWithSubscriptionAsync()
+    private async Task<(string Email, string Password)> CreateClinicAdminAsync(PlanTier? planTier)
     {
         var email = $"admin_{Guid.NewGuid()}@teste.com";
         var password = "SenhaNova@123";
@@ -52,13 +56,16 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         var clinicResult = await clinicResponse.Content.ReadFromJsonAsync<RegisterClinicResponse>();
         var clinicId = clinicResult!.ClinicId;
 
-        using (var scope = _factory.Services.CreateScope())
+        if (planTier.HasValue)
         {
-            var billingDb = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
-            var subscription = Subscription.Create(
-                clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PlanTier.Basic);
-            await billingDb.Subscriptions.AddAsync(subscription);
-            await billingDb.SaveChangesAsync();
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var billingDb = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
+                var subscription = Subscription.Create(
+                    clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", planTier.Value);
+                await billingDb.Subscriptions.AddAsync(subscription);
+                await billingDb.SaveChangesAsync();
+            }
         }
 
         var tokenResponse = await _client.GetAsync($"/api/users/{email}/generate-reset-token");
@@ -72,9 +79,9 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
 
     private record AuthenticatedContext(Guid UserId, Guid ClinicId);
 
-    private async Task<AuthenticatedContext> AuthenticateAsync()
+    private async Task<AuthenticatedContext> AuthenticateAsync(PlanTier? planTier = PlanTier.Professional)
     {
-        var (email, password, userId, clinicId) = await SetupAdminWithStaffAsync();
+        var (email, password, userId, clinicId) = await SetupAdminWithStaffAsync(planTier);
         var loginResponse = await _client.PostAsJsonAsync("/api/users/login", new { Email = email, Password = password });
         var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
         _client.DefaultRequestHeaders.Authorization =
@@ -82,9 +89,9 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         return new AuthenticatedContext(userId, clinicId);
     }
 
-    private async Task<(string Email, string Password, Guid UserId, Guid ClinicId)> SetupAdminWithStaffAsync()
+    private async Task<(string Email, string Password, Guid UserId, Guid ClinicId)> SetupAdminWithStaffAsync(PlanTier? planTier)
     {
-        var (email, password) = await SetupAdminWithSubscriptionAsync();
+        var (email, password) = await CreateClinicAdminAsync(planTier);
 
         using var scope = _factory.Services.CreateScope();
         var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
@@ -94,7 +101,7 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
         return (email, password, user!.Id, user.ClinicId);
     }
 
-    private Task<HttpResponseMessage> RegisterStaffAsync(string name, string email) =>
+    private Task<HttpResponseMessage> RegisterStaffAsync(string name, string email, string role = "Veterinarian") =>
         _client.PostAsJsonAsync("/api/clinics/me/staff", new
         {
             Name = name,
@@ -102,8 +109,32 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
             DocumentNumber = Guid.NewGuid().ToString("N").Substring(0, 11),
             PhoneNumber = "11999990000",
             BirthDate = new DateOnly(1990, 1, 1),
-            Role = "Veterinarian"
+            Role = role
         });
+
+    private async Task SeedStaffAsync(Guid clinicId, Guid createdByUserId, int quantity)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+
+        for (int i = 0; i < quantity; i++)
+        {
+            var staffEmail = $"seed_staff_{i}_{Guid.NewGuid()}@teste.com";
+            var staffUser = User.CreateStaff(
+                clinicId,
+                createdByUserId,
+                $"Seed Staff {i}",
+                staffEmail,
+                null,
+                Guid.NewGuid().ToString("N").Substring(0, 11),
+                "11999990000",
+                new DateOnly(1990, 1, 1),
+                UserRole.Veterinarian);
+            await identityDb.Users.AddAsync(staffUser);
+        }
+
+        await identityDb.SaveChangesAsync();
+    }
 
     private async Task<Guid> GetStaffUserIdByEmailAsync(string staffEmail)
     {
@@ -200,20 +231,126 @@ public class StaffControllerIntegrationTests : IClassFixture<CustomWebApplicatio
     }
 
     [Fact]
-    public async Task RegisterStaff_Should_Return_400_When_Plan_Limit_Reached()
+    public async Task RegisterStaff_Should_Return_200_When_Within_Essential_Limit()
     {
-        await AuthenticateAsync();
+        await AuthenticateAsync(PlanTier.Essential);
+
+        var response = await RegisterStaffAsync("Dentro do Limite", $"dentro_limite_{Guid.NewGuid()}@teste.com");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task RegisterStaff_Should_Return_400_When_Essential_Limit_Reached()
+    {
+        var context = await AuthenticateAsync(PlanTier.Essential);
+
+        await SeedStaffAsync(context.ClinicId, context.UserId, ESSENTIAL_STAFF_LIMIT);
+
+        var blockedEmail = $"staff_excedente_{Guid.NewGuid()}@teste.com";
+        var blockedResponse = await RegisterStaffAsync("Staff Excedente", blockedEmail);
+
+        blockedResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorContent = await blockedResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("identity.staff_limit_reached");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(blockedEmail);
+            var notSaved = await identityDb.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
+            notSaved.Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task RegisterStaff_Should_Return_400_When_Professional_Limit_Reached()
+    {
+        var context = await AuthenticateAsync(PlanTier.Professional);
+
+        await SeedStaffAsync(context.ClinicId, context.UserId, PROFESSIONAL_STAFF_LIMIT);
+
+        var blockedResponse = await RegisterStaffAsync("Staff Excedente", $"staff_excedente_{Guid.NewGuid()}@teste.com");
+
+        blockedResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorContent = await blockedResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("identity.staff_limit_reached");
+    }
+
+    [Fact]
+    public async Task RegisterStaff_Should_Return_400_When_Clinic_Has_No_Active_Subscription()
+    {
+        var context = await AuthenticateAsync(PlanTier.Essential);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var billingDb = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
+            var subscription = await billingDb.Subscriptions.FirstAsync(s => s.ClinicId == context.ClinicId);
+            billingDb.Subscriptions.Remove(subscription);
+            await billingDb.SaveChangesAsync();
+        }
+
+        var blockedEmail = $"sem_assinatura_{Guid.NewGuid()}@teste.com";
+        var blockedResponse = await RegisterStaffAsync("Sem Assinatura", blockedEmail);
+
+        blockedResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorContent = await blockedResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        errorContent!.ErrorCode.Should().Be("identity.subscription_inactive");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            var emailVo = PetClinix.Modules.Identity.Domain.ValueObjects.Email.Create(blockedEmail);
+            var notSaved = await identityDb.Users.FirstOrDefaultAsync(u => u.Email == emailVo);
+            notSaved.Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task RegisterStaff_Should_Return_200_When_Plan_Is_Premium_Without_Limit()
+    {
+        var context = await AuthenticateAsync(PlanTier.Premium);
+
+        await SeedStaffAsync(context.ClinicId, context.UserId, PROFESSIONAL_STAFF_LIMIT);
 
         for (int i = 0; i < 3; i++)
         {
-            await RegisterStaffAsync($"Staff {i}", $"staff_{i}_{Guid.NewGuid()}@teste.com");
+            var response = await RegisterStaffAsync($"Staff Premium {i}", $"premium_staff_{i}_{Guid.NewGuid()}@teste.com");
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
         }
+    }
 
-        var limitResponse = await RegisterStaffAsync("Staff 5", $"staff5_{Guid.NewGuid()}@teste.com");
+    [Fact]
+    public async Task RegisterStaff_Should_Return_200_When_Receptionist_After_Vet_Limit_Reached()
+    {
+        var context = await AuthenticateAsync(PlanTier.Essential);
 
-        limitResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var errorContent = await limitResponse.Content.ReadFromJsonAsync<ErrorResponse>();
-        errorContent!.ErrorCode.Should().Be("identity.staff_limit_reached");
+        await SeedStaffAsync(context.ClinicId, context.UserId, ESSENTIAL_STAFF_LIMIT);
+
+        var response = await RegisterStaffAsync("Recepcao Livre", $"recepcao_{Guid.NewGuid()}@teste.com", "Receptionist");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task RegisterStaff_Should_Return_200_When_Deactivated_Vet_Frees_Slot()
+    {
+        await AuthenticateAsync(PlanTier.Essential);
+
+        var firstVetEmail = $"vet_{Guid.NewGuid()}@teste.com";
+        var firstResponse = await RegisterStaffAsync("Dr. Um", firstVetEmail);
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondVetEmail = $"vet_{Guid.NewGuid()}@teste.com";
+        var secondResponse = await RegisterStaffAsync("Dr. Dois", secondVetEmail);
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondVetId = await GetStaffUserIdByEmailAsync(secondVetEmail);
+        var deactivateResponse = await _client.DeleteAsync($"/api/clinics/me/staff/{secondVetId}");
+        deactivateResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var thirdResponse = await RegisterStaffAsync("Dr. Terceiro", $"vet_{Guid.NewGuid()}@teste.com");
+        thirdResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
