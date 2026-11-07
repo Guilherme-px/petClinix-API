@@ -1,6 +1,7 @@
 using PetClinix.BuildingBlocks.Application;
 using PetClinix.Modules.Identity.Application.Contracts;
 using PetClinix.Modules.Identity.Domain.Entities;
+using PetClinix.Modules.Identity.Domain.Enums;
 using PetClinix.Modules.Identity.Domain.Exceptions;
 using PetClinix.Modules.Identity.Domain.Repositories;
 using PetClinix.Modules.Identity.Domain.ValueObjects;
@@ -28,12 +29,24 @@ public sealed class RegisterStaffCommandHandler : ICommandHandler<RegisterStaffC
 
     public async Task<Result<RegisterStaffResponse>> Handle(RegisterStaffCommand command, CancellationToken cancellationToken)
     {
-        var staffLimit = await _subscriptionStatusService.GetStaffLimitAsync(command.ClinicId, cancellationToken);
-        var currentStaffCount = await _userRepository.CountByClinicIdAsync(command.ClinicId, cancellationToken);
-
-        if (currentStaffCount >= staffLimit)
+        if (command.Role == UserRole.Veterinarian)
         {
-            return Result<RegisterStaffResponse>.Failure("identity.staff_limit_reached", "O limite de funcionários do seu plano foi atingido. Faça um upgrade para adicionar mais.");
+            var staffLimit = await _subscriptionStatusService.GetStaffLimitAsync(command.ClinicId, cancellationToken);
+
+            if (staffLimit <= 0)
+            {
+                return Result<RegisterStaffResponse>.Failure("identity.subscription_inactive", "Assinatura inativa ou sem plano contratado — não é possível adicionar profissionais.");
+            }
+
+            if (staffLimit != int.MaxValue)
+            {
+                var activeVeterinarians = await _userRepository.CountActiveVeterinariansAsync(command.ClinicId, cancellationToken);
+
+                if (activeVeterinarians >= staffLimit)
+                {
+                    return Result<RegisterStaffResponse>.Failure("identity.staff_limit_reached", "O limite de veterinários do seu plano foi atingido. Faça um upgrade para adicionar mais.");
+                }
+            }
         }
 
         var emailVo = Email.Create(command.Email);
