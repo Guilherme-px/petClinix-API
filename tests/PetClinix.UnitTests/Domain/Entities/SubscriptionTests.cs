@@ -15,7 +15,7 @@ public class SubscriptionTests
         var stripeCustomerId = "cus_123";
         var stripeSubscriptionId = "sub_456";
 
-        var subscription = Subscription.Create(clinicId, stripeCustomerId, stripeSubscriptionId, PlanTier.Basic);
+        var subscription = Subscription.Create(clinicId, stripeCustomerId, stripeSubscriptionId, PlanTier.Essential);
 
         subscription.Id.Should().NotBeEmpty();
         subscription.ClinicId.Should().Be(clinicId);
@@ -29,7 +29,7 @@ public class SubscriptionTests
     [Fact]
     public void MarkAsCanceled_Should_Set_Status_To_Canceled_And_UpdateDate()
     {
-        var subscription = Subscription.Create(Guid.NewGuid(), "cus_123", "sub_456", PlanTier.Basic);
+        var subscription = Subscription.Create(Guid.NewGuid(), "cus_123", "sub_456", PlanTier.Essential);
 
         subscription.MarkAsCanceled();
 

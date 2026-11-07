@@ -61,7 +61,7 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
         using (var scope = _factory.Services.CreateScope())
         {
             var billingDb = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
-            var subscription = Subscription.Create(clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PlanTier.Basic);
+            var subscription = Subscription.Create(clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PlanTier.Essential);
             await billingDb.Subscriptions.AddAsync(subscription);
             await billingDb.SaveChangesAsync();
         }

@@ -56,7 +56,7 @@ public class AppointmentsControllerIntegrationTests : IClassFixture<CustomWebApp
         {
             var billingDb = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
             var subscription = PetClinix.Modules.Billing.Domain.Entities.Subscription.Create(
-                clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PetClinix.Modules.Billing.Domain.Enums.PlanTier.Basic);
+                clinicId, $"cus_test_{Guid.NewGuid()}", $"sub_test_{Guid.NewGuid()}", PetClinix.Modules.Billing.Domain.Enums.PlanTier.Essential);
             await billingDb.Subscriptions.AddAsync(subscription);
             await billingDb.SaveChangesAsync();
         }

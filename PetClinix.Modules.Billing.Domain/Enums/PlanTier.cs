@@ -2,7 +2,7 @@ namespace PetClinix.Modules.Billing.Domain.Enums;
 
 public enum PlanTier
 {
-    Basic = 1,
-    Intermediate = 2,
-    Enterprise = 3
+    Essential = 1,
+    Professional = 2,
+    Premium = 3
 }

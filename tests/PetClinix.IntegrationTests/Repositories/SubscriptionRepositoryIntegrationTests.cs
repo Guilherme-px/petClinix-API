@@ -26,7 +26,7 @@ public class SubscriptionRepositoryIntegrationTests : IClassFixture<CustomWebApp
         var context = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
 
         var clinicId = Guid.NewGuid();
-        var subscription = Subscription.Create(clinicId, "cus_integration_1", "sub_integration_1", PlanTier.Basic);
+        var subscription = Subscription.Create(clinicId, "cus_integration_1", "sub_integration_1", PlanTier.Essential);
 
         await repository.AddAsync(subscription);
 
@@ -45,7 +45,7 @@ public class SubscriptionRepositoryIntegrationTests : IClassFixture<CustomWebApp
         var context = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
 
         var clinicId = Guid.NewGuid();
-        var subscription = Subscription.Create(clinicId, "cus_integration_2", "sub_integration_2", PlanTier.Basic);
+        var subscription = Subscription.Create(clinicId, "cus_integration_2", "sub_integration_2", PlanTier.Essential);
 
         await context.Subscriptions.AddAsync(subscription);
         await context.SaveChangesAsync();

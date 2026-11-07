@@ -26,7 +26,7 @@ public class ActivateSubscriptionCommandHandlerTests
         Guid.NewGuid(),
         "cus_test_123",
         "sub_test_456",
-        PlanTier.Basic);
+        PlanTier.Essential);
 
     [Fact]
     public async Task Handle_Should_Create_Subscription_When_Not_Exists()
@@ -44,7 +44,7 @@ public class ActivateSubscriptionCommandHandlerTests
             s != null &&
             s.ClinicId == command.ClinicId &&
             s.StripeSubscriptionId == command.StripeSubscriptionId &&
-            s.PlanTier == PlanTier.Basic),
+            s.PlanTier == PlanTier.Essential),
             Arg.Any<CancellationToken>());
     }
 
@@ -52,7 +52,7 @@ public class ActivateSubscriptionCommandHandlerTests
     public async Task Handle_Should_Not_Create_Subscription_When_Already_Exists()
     {
         var command = CreateValidCommand();
-        var existingSubscription = Subscription.Create(command.ClinicId, command.StripeCustomerId, command.StripeSubscriptionId, PlanTier.Basic);
+        var existingSubscription = Subscription.Create(command.ClinicId, command.StripeCustomerId, command.StripeSubscriptionId, PlanTier.Essential);
 
         _subscriptionRepositoryMock
             .GetByClinicIdAsync(command.ClinicId, Arg.Any<CancellationToken>())
