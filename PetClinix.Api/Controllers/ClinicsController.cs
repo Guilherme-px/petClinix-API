@@ -4,6 +4,7 @@ using PetClinix.BuildingBlocks.Application;
 using PetClinix.Modules.Identity.Application.UseCases.RegisterStaff;
 using PetClinix.Modules.Identity.Application.UseCases.UpdateClinic;
 using PetClinix.Modules.Identity.Application.UseCases.GetStaff;
+using PetClinix.Modules.Identity.Application.UseCases.GetStaffLimit;
 using PetClinix.Modules.Identity.Application.UseCases.UpdateStaff;
 using PetClinix.Modules.Identity.Application.UseCases.DeactivateStaff;
 using PetClinix.Modules.Identity.Domain.Enums;
@@ -19,6 +20,7 @@ public class ClinicsController : ControllerBase
     private readonly ICommandHandler<UpdateClinicCommand, Result> _updateClinicHandler;
     private readonly ICommandHandler<RegisterStaffCommand, Result<RegisterStaffResponse>> _registerStaffHandler;
     private readonly ICommandHandler<GetStaffQuery, Result<PagedResult<StaffResponse>>> _getStaffHandler;
+    private readonly ICommandHandler<GetStaffLimitQuery, Result<StaffLimitResponse>> _getStaffLimitHandler;
     private readonly ICommandHandler<GetStaffByIdQuery, Result<StaffResponse>> _getStaffByIdHandler;
     private readonly ICommandHandler<UpdateStaffCommand, Result> _updateStaffHandler;
     private readonly ICommandHandler<DeactivateStaffCommand, Result> _deactivateStaffHandler;
@@ -28,6 +30,7 @@ public class ClinicsController : ControllerBase
         ICommandHandler<UpdateClinicCommand, Result> updateClinicHandler,
         ICommandHandler<RegisterStaffCommand, Result<RegisterStaffResponse>> registerStaffHandler,
         ICommandHandler<GetStaffQuery, Result<PagedResult<StaffResponse>>> getStaffHandler,
+        ICommandHandler<GetStaffLimitQuery, Result<StaffLimitResponse>> getStaffLimitHandler,
         ICommandHandler<GetStaffByIdQuery, Result<StaffResponse>> getStaffByIdHandler,
         ICommandHandler<UpdateStaffCommand, Result> updateStaffHandler,
         ICommandHandler<DeactivateStaffCommand, Result> deactivateStaffHandler,
@@ -36,6 +39,7 @@ public class ClinicsController : ControllerBase
         _updateClinicHandler = updateClinicHandler;
         _registerStaffHandler = registerStaffHandler;
         _getStaffHandler = getStaffHandler;
+        _getStaffLimitHandler = getStaffLimitHandler;
         _getStaffByIdHandler = getStaffByIdHandler;
         _updateStaffHandler = updateStaffHandler;
         _deactivateStaffHandler = deactivateStaffHandler;
@@ -203,6 +207,21 @@ public class ClinicsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("me/staff-limit")]
+    public async Task<IActionResult> GetStaffLimit(CancellationToken cancellationToken)
+    {
+        if (!User.TryGetClinicId(out var clinicId))
+        {
+            return Unauthorized(new { message = "Token inválido ou sem ID da clínica." });
+        }
+
+        var query = new GetStaffLimitQuery(clinicId);
+        var result = await _getStaffLimitHandler.Handle(query, cancellationToken);
+
+        return Ok(result.Value);
     }
 }
 

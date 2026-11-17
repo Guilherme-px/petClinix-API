@@ -67,6 +67,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Resend;
 using Npgsql;
+using PetClinix.Modules.Identity.Application.UseCases.GetStaffLimit;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -163,6 +164,7 @@ builder.Services.AddScoped<IAppointmentReferenceChecker, AppointmentReferenceChe
 builder.Services.AddScoped<IBillingUnitOfWork, BillingUnitOfWork>();
 builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 builder.Services.AddScoped<ICommandHandler<GetVeterinariansQuery, Result<List<VeterinarianResponse>>>, GetVeterinariansQueryHandler>();
+builder.Services.AddScoped<ICommandHandler<GetStaffLimitQuery, Result<StaffLimitResponse>>, GetStaffLimitQueryHandler>();
 
 builder.Services.AddSingleton<IClinicScheduleService>(new MockClinicScheduleService());
 
