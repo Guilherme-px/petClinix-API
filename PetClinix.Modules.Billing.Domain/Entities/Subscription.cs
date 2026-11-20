@@ -36,4 +36,10 @@ public sealed class Subscription : AggregateRoot
         Status = SubscriptionStatus.Canceled;
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    public void ChangePlan(PlanTier planTier)
+    {
+        PlanTier = planTier;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 }
