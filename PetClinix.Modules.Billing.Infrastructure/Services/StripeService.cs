@@ -9,14 +9,16 @@ namespace PetClinix.Modules.Billing.Infrastructure.Services;
 public class StripeService : IStripeService
 {
     private readonly SessionService _sessionService;
+    private readonly IPortalConfigurationProvider _portalConfigurationProvider;
 
-    public StripeService(IConfiguration configuration)
+    public StripeService(IConfiguration configuration, IPortalConfigurationProvider portalConfigurationProvider)
     {
         var secretKey = configuration["Stripe:SecretKey"]
             ?? throw new InvalidOperationException("Stripe SecretKey não configurada.");
 
         StripeConfiguration.ApiKey = secretKey;
         _sessionService = new SessionService();
+        _portalConfigurationProvider = portalConfigurationProvider;
     }
 
     public async Task<string> CreateCheckoutSessionAsync(CreateCheckoutSessionCommand command, CancellationToken cancellationToken)
@@ -45,15 +47,18 @@ public class StripeService : IStripeService
 
     public async Task<string> CreateBillingPortalSessionAsync(string stripeCustomerId, string returnUrl, CancellationToken cancellationToken)
     {
+        var configurationId = await _portalConfigurationProvider.GetOrCreateConfigurationIdAsync(cancellationToken);
+
         var options = new Stripe.BillingPortal.SessionCreateOptions
         {
             Customer = stripeCustomerId,
-            ReturnUrl = returnUrl
+            ReturnUrl = returnUrl,
+            Configuration = configurationId
         };
 
         var service = new Stripe.BillingPortal.SessionService();
         var session = await service.CreateAsync(options, cancellationToken: cancellationToken);
 
         return session.Url;
-    }   
+    }
 }
