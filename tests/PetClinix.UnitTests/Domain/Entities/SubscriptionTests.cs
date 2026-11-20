@@ -37,4 +37,17 @@ public class SubscriptionTests
         subscription.UpdatedAtUtc.Should().NotBeNull();
         subscription.UpdatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
     }
+
+    [Fact]
+    public void ChangePlan_Should_Update_PlanTier_And_UpdateDate()
+    {
+        var subscription = Subscription.Create(Guid.NewGuid(), "cus_123", "sub_456", PlanTier.Essential);
+
+        subscription.ChangePlan(PlanTier.Premium);
+
+        subscription.PlanTier.Should().Be(PlanTier.Premium);
+        subscription.Status.Should().Be(SubscriptionStatus.Active);
+        subscription.UpdatedAtUtc.Should().NotBeNull();
+        subscription.UpdatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 }
