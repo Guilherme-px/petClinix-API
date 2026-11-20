@@ -68,6 +68,7 @@ using System.Threading.RateLimiting;
 using Resend;
 using Npgsql;
 using PetClinix.Modules.Identity.Application.UseCases.GetStaffLimit;
+using PetClinix.Modules.Billing.Application.UseCases.SyncSubscriptionPlan;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -162,10 +163,13 @@ builder.Services.AddScoped<IPetDependencyChecker, PetClinix.Modules.Pets.Infrast
 builder.Services.AddScoped<IAppointmentDependencyChecker, AppointmentDependencyChecker>();
 builder.Services.AddScoped<IAppointmentReferenceChecker, AppointmentReferenceChecker>();
 builder.Services.AddScoped<IBillingUnitOfWork, BillingUnitOfWork>();
+builder.Services.AddScoped<ICommandHandler<SyncSubscriptionPlanCommand, Result>, SyncSubscriptionPlanCommandHandler>();
 builder.Services.AddScoped<IWebhookEventRepository, WebhookEventRepository>();
 builder.Services.AddScoped<ICommandHandler<GetVeterinariansQuery, Result<List<VeterinarianResponse>>>, GetVeterinariansQueryHandler>();
 builder.Services.AddScoped<ICommandHandler<GetStaffLimitQuery, Result<StaffLimitResponse>>, GetStaffLimitQueryHandler>();
 
+builder.Services.AddSingleton<IStripePlanCatalog, StripePlanCatalog>();
+builder.Services.AddSingleton<IPortalConfigurationProvider, StripePortalConfigurationProvider>();
 builder.Services.AddSingleton<IClinicScheduleService>(new MockClinicScheduleService());
 
 builder.Services.AddScoped<IServiceCatalogService>(sp =>
